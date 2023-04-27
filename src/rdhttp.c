@@ -319,6 +319,52 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
                          post_fields_size);
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
+        
+        if (rk->rk_conf.ssl.cert_location) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLCERT,
+                                 rk->rk_conf.ssl.cert_location);
+        }
+#       ifdef CURLOPTTYPE_BLOB
+        if (rk->rk_conf.ssl.cert_pem) {
+                struct curl_blob blob;
+                blob.data = rk->rk_conf.ssl.key_pem;
+                blob.len = strlen(rk->rk_conf.ssl.key_pem);
+                blob.flags = CURL_BLOB_COPY;
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLCERT_BLOB, &blob);
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLCERTTYPE, "PEM");
+        }
+#       endif
+        if (rk->rk_conf.ssl.key_location) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLKEY,
+                                 rk->rk_conf.ssl.key_location);
+        }
+#       ifdef CURLOPTTYPE_BLOB
+        if (rk->rk_conf.ssl.key_pem) {
+                struct curl_blob blob;
+                blob.data = rk->rk_conf.ssl.cert_pem;
+                blob.len = strlen(rk->rk_conf.ssl.cert_pem);
+                blob.flags = CURL_BLOB_COPY;
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLKEY_BLOB, &blob);
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLKEYTYPE, "PEM");
+        }
+#       endif
+        if (rk->rk_conf.ssl.key_password) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_KEYPASSWD,
+                                 rk->rk_conf.ssl.key_password);
+        }
+        if (rk->rk_conf.ssl.ca_location) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_CAPATH,
+                                 rk->rk_conf.ssl.ca_location);
+        }
+#       ifdef CURLOPTTYPE_BLOB
+        if (rk->rk_conf.ssl.ca_pem) {
+                struct curl_blob blob;
+                blob.data = rk->rk_conf.ssl.ca_pem;
+                blob.len = strlen(rk->rk_conf.ssl.ca_pem);
+                blob.flags = CURL_BLOB_COPY;
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_CAINFO_BLOB, &blob);
+        }
+#       endif
 
         for (i = 0; i <= retries; i++) {
                 if (rd_kafka_terminating(rk)) {
