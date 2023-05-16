@@ -1083,6 +1083,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "ProduceResponse handler: "
      "rd_kafka_resp_err_t (*cb) (rd_kafka_t *rk, "
      "int32_t brokerid, uint64_t msgid, rd_kafka_resp_err_t err)"},
+    
+    /* Solace additions */
+    {_RK_GLOBAL, "solace.thread.limit", _RK_C_INT,
+     _RK(solace.thread.limit),
+     "System-wide limit to the number of threads spawned by librdkafka " 
+     "instances. Specify 0 to have system take its best guess as to the "
+     "appropriate limit.", 
+     0, INT_MAX, 0},
+    {_RK_GLOBAL, "solace.thread.stack.size", _RK_C_INT,
+     _RK(solace.thread.stack_size),
+     "The stack size allocated for each spawned thread. Specify 0 to use the "
+     "operating system default.", 
+     0, 16 * 1024 * 1024, 1 * 1024 * 1024},
 
     /* Global consumer group properties */
     {_RK_GLOBAL | _RK_CGRP | _RK_HIGH, "group.id", _RK_C_STR, _RK(group_id_str),

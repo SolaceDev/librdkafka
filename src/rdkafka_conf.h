@@ -558,6 +558,14 @@ struct rd_kafka_conf_s {
                  *  overwritten by passing an explicit default_topic_conf. */
                 rd_bool_t default_topic_conf_overwritten;
         } warn;
+        
+        /* Solace extensions */
+        struct {
+                struct {
+                        int limit;
+                        int stack_size;
+                } thread;
+        } solace;
 };
 
 int rd_kafka_socket_cb_linux(int domain, int type, int protocol, void *opaque);

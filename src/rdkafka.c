@@ -105,6 +105,10 @@ int rd_kafka_thread_cnt(void) {
         return rd_atomic32_get(&rd_kafka_thread_cnt_curr);
 }
 
+void rd_kafka_set_thread_stack_size(size_t stack_size) {
+        thrd_set_default_stack_size(stack_size);
+}
+
 /**
  * Current thread's log name (TLS)
  */

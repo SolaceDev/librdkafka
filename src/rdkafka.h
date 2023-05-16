@@ -5255,6 +5255,12 @@ void rd_kafka_dump(FILE *fp, rd_kafka_t *rk);
 RD_EXPORT
 int rd_kafka_thread_cnt(void);
 
+/**
+ * @brief Sets the stack size used by librdkafka threads. 
+ */
+RD_EXPORT
+void rd_kafka_set_thread_stack_size(size_t stack_size);
+
 
 /**
  * @enum rd_kafka_thread_type_t

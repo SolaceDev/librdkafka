@@ -339,6 +339,13 @@ typedef HANDLE thrd_t;
 typedef pthread_t thrd_t;
 #endif
 
+#if defined(_TTHREAD_POSIX_)
+  void thrd_set_default_stack_size(size_t stack_size);
+#else
+  static void thrd_set_default_stack_size(size_t) {};
+#endif
+
+
 /** Thread start function.
 * Any thread that is started with the @ref thrd_create() function must be
 * started through a function of this type.

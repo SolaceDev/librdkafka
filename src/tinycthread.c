@@ -587,6 +587,37 @@ static void * _thrd_wrapper_function(void * aArg)
 #endif
 }
 
+#if defined(_TTHREAD_POSIX_)
+  static pthread_attr_t* _thrd_default_attr_p = NULL;
+  
+  void thrd_set_default_stack_size(size_t stack_size)
+  {
+    static pthread_attr_t default_attr;
+
+    if (stack_size > 0)
+    {
+      if (_thrd_default_attr_p == NULL)
+      {
+        if (pthread_attr_init(&default_attr) == 0)
+        {
+          _thrd_default_attr_p = &default_attr;
+        }
+      }
+      if (_thrd_default_attr_p != NULL)
+      {
+        if (stack_size < PTHREAD_STACK_MIN) stack_size = PTHREAD_STACK_MIN;
+        pthread_attr_setstacksize(_thrd_default_attr_p, stack_size);
+      }
+    }
+    else if (_thrd_default_attr_p != NULL)
+    {
+      pthread_attr_destroy(_thrd_default_attr_p);
+      _thrd_default_attr_p = NULL;
+    }
+  }
+#endif
+
+
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
 {
   /* Fill out the thread startup information (passed to the thread wrapper,
@@ -605,8 +636,8 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
 #elif defined(_TTHREAD_POSIX_)
   {
           int err;
-          if((err = pthread_create(thr, NULL, _thrd_wrapper_function,
-                                   (void *)ti)) != 0) {
+          if((err = pthread_create(thr, _thrd_default_attr_p,
+                                   _thrd_wrapper_function, (void *)ti)) != 0) {
                   errno = err;
                   *thr = 0;
           }
