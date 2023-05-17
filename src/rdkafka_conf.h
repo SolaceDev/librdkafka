@@ -561,9 +561,10 @@ struct rd_kafka_conf_s {
         
         /* Solace extensions */
         struct {
+                int instance_limit;     /* rdkafka instance limit */
                 struct {
-                        int limit;
-                        int stack_size;
+                        int limit;      /* rdkafka thread limit */
+                        int stack_size; /* thread maximum stack size */
                 } thread;
         } solace;
 };

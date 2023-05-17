@@ -1085,10 +1085,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "int32_t brokerid, uint64_t msgid, rd_kafka_resp_err_t err)"},
     
     /* Solace additions */
+    {_RK_GLOBAL, "solace.instance.limit", _RK_C_INT,
+     _RK(solace.instance_limit),
+     "System-wide limit to the number of rdkafka instances. Specify 0 to have "
+     "the system take its best guess as to the appropriate limit.", 
+     0, INT_MAX, 0},
     {_RK_GLOBAL, "solace.thread.limit", _RK_C_INT,
      _RK(solace.thread.limit),
-     "System-wide limit to the number of threads spawned by librdkafka " 
-     "instances. Specify 0 to have system take its best guess as to the "
+     "System-wide limit to the number of threads spawned by rdkafka " 
+     "instances. Specify 0 to have the system take its best guess as to the "
      "appropriate limit.", 
      0, INT_MAX, 0},
     {_RK_GLOBAL, "solace.thread.stack.size", _RK_C_INT,
