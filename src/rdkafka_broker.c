@@ -676,7 +676,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 void rd_kafka_broker_conn_closed(rd_kafka_broker_t *rkb,
                                  rd_kafka_resp_err_t err,
                                  const char *errstr) {
-        int log_level = LOG_ERR;
+        int log_level = LOG_WARNING;
 
         if (!rkb->rkb_rk->rk_conf.log_connection_close) {
                 /* Silence all connection closes */
@@ -962,7 +962,7 @@ static ssize_t rd_kafka_broker_send(rd_kafka_broker_t *rkb, rd_slice_t *slice) {
                                     sizeof(errstr));
 
         if (r == -1) {
-                rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_broker_fail(rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__TRANSPORT,
                                      "Send failed: %s", errstr);
                 rd_atomic64_add(&rkb->rkb_c.tx_err, 1);
                 return -1;
@@ -1012,7 +1012,7 @@ static int rd_kafka_broker_resolve(rd_kafka_broker_t *rkb,
 
                 if (!rkb->rkb_rsal) {
                         rd_kafka_broker_fail(
-                            rkb, LOG_ERR, RD_KAFKA_RESP_ERR__RESOLVE,
+                            rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__RESOLVE,
                             "Failed to resolve '%s': %s", nodename, errstr);
                         return -1;
                 } else {
@@ -2020,7 +2020,7 @@ err:
         if (!strcmp(errstr, "Disconnected"))
                 rd_kafka_broker_conn_closed(rkb, err, errstr);
         else
-                rd_kafka_broker_fail(rkb, LOG_ERR, err, "Receive failed: %s",
+                rd_kafka_broker_fail(rkb, LOG_WARNING, err, "Receive failed: %s",
                                      errstr);
         return -1;
 }
@@ -2218,7 +2218,7 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
 
         if (!(rkb->rkb_transport = rd_kafka_transport_connect(
                   rkb, sinx, errstr, sizeof(errstr)))) {
-                rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_broker_fail(rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__TRANSPORT,
                                      "%s", errstr);
                 return -1;
         }
@@ -2319,7 +2319,7 @@ static void rd_kafka_broker_handle_SaslHandshake(rd_kafka_t *rk,
 err_parse:
         err = rkbuf->rkbuf_err;
 err:
-        rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__AUTHENTICATION,
+        rd_kafka_broker_fail(rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__AUTHENTICATION,
                              "SASL %s mechanism handshake failed: %s: "
                              "broker's supported mechanisms: %s",
                              rkb->rkb_rk->rk_conf.sasl.mechanisms,
@@ -2543,7 +2543,7 @@ void rd_kafka_broker_connect_done(rd_kafka_broker_t *rkb, const char *errstr) {
 
         if (errstr) {
                 /* Connect failed */
-                rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_broker_fail(rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__TRANSPORT,
                                      "%s", errstr);
                 return;
         }
