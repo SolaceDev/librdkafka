@@ -2626,10 +2626,18 @@ fail:
          * we need to avoid rk_conf fields from being freed from
          * rd_kafka_destroy_internal() since they belong to app_conf.
          * However, there are some internal fields, such as interceptors,
-         * that belong to rk_conf and thus needs to be cleaned up.
+         * that belong to rk_conf and thus needs to be cleaned up. But,
+         * interceptors that originate from the application configuration
+         * -- including on_conf_set, on_conf_dup, on_conf_destroy and on_new
+         * -- must not be cleaned up.
          * Legacy APIs, sigh.. */
         if (app_conf) {
                 rd_kafka_assignors_term(rk);
+                rd_list_init(&rk->rk_conf.interceptors.on_conf_set, 0, NULL);
+                rd_list_init(&rk->rk_conf.interceptors.on_conf_dup, 0, NULL);
+                rd_list_init(&rk->rk_conf.interceptors.on_conf_destroy, 
+                             0, NULL);
+                rd_list_init(&rk->rk_conf.interceptors.on_new, 0, NULL);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
