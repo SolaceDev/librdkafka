@@ -123,6 +123,7 @@ struct rd_kafka_topic_s {
 
         rwlock_t rkt_lock;
         rd_kafkap_str_t *rkt_topic;
+        rd_kafkap_str_t *rkt_topic_js;
 
         rd_kafka_toppar_t *rkt_ua; /**< Unassigned partition (-1) */
         rd_kafka_toppar_t **rkt_p; /**< Partition array */

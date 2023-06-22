@@ -997,6 +997,11 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_metadata_destroy(rk->rk_full_metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
+
+        if (rk->rk_name_js)      rd_kafkap_str_destroy(rk->rk_name_js);
+        if (rk->rk_client_id_js) rd_kafkap_str_destroy(rk->rk_client_id_js);
+        if (rk->rk_group_id_js)  rd_kafkap_str_destroy(rk->rk_group_id_js);
+
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
         rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
@@ -1299,6 +1304,70 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_metadata_cache_destroy(rk);
         rd_kafka_wrunlock(rk);
+}
+
+/**
+ * If the specified str contains characters that must be escaped in JSON,
+ * return a new rd_kafkap_str_t* containing the JSON-escaped strings. If the
+ * specified str does not contaim any characters that must be escaped in JSON
+ * (assumed to be the usual case), return NULL.
+ */
+rd_kafkap_str_t* rd_kafka_make_json_str(char const* str, size_t len) {
+        static char const* const escape_strs[256] = {
+                "\\u0000",  "\\u0001",  "\\u0002",  "\\u0003",  /* 0x */
+                "\\u0004",  "\\u0005",  "\\u0006",  "\\u0007",
+                "\\b",      "\\t",      "\\n",      "\\u000b",
+                "\\f",      "\\r",      "\\u000e",  "\\u000f",
+                "\\u0010",  "\\u0011",  "\\u0012",  "\\u0013",  /* 1x */
+                "\\u0014",  "\\u0015",  "\\u0016",  "\\u0017",
+                "\\u0018",  "\\u0019",  "\\u001a",  "\\u001b",
+                "\\u001c",  "\\u001d",  "\\u001e",  "\\u001f",
+                NULL,       NULL,       "\\\"",     NULL,       /* 2x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,       /* 3x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,       /* 4x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,       /* 5x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                "\\\\",     NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,       /* 6x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,       /* 7x */
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       NULL,
+                NULL,       NULL,       NULL,       "\\u007f",
+                /* Characters >= 0x80: all NULL (unescaped). There are
+                 * assumed to be UTF-8 multi-byte characters which don't
+                 * need to be escaped. */
+        };
+
+        char jsstr[6 * len + 1]; /* pessimistic but safe */
+        size_t jslen = 0;
+        size_t idx = 0;
+
+        if ((str == NULL) || (len <= 0)) return NULL;
+
+        for (; idx < len; ++idx) {
+                const char* escape_str = escape_strs[(unsigned)str[idx]];
+                if (escape_str == NULL) {
+                        jsstr[jslen++] = str[idx];
+                } else {
+                        rd_strlcpy(jsstr + jslen, escape_str, 
+                                   6 * len + 1 - jslen);
+                        jslen += strlen(escape_str);
+                }
+        }
+        return (jslen <= len)? NULL: rd_kafkap_str_new(jsstr, jslen);
 }
 
 /**
@@ -1695,7 +1764,9 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
             "\"simple_cnt\":%i, "
             "\"metadata_cache_cnt\":%i, "
             "\"brokers\":{ " /*open brokers*/,
-            rk->rk_name, rk->rk_conf.client_id_str,
+            rk->rk_name_js? rk->rk_name_js->str: rk->rk_name,
+            rk->rk_client_id_js? rk->rk_client_id_js->str
+                               : rk->rk_conf.client_id_str,
             rd_kafka_type2str(rk->rk_type), now, (signed long long)time(NULL),
             now - rk->rk_ts_created, rd_kafka_q_len(rk->rk_rep), tot_cnt,
             tot_size, rk->rk_curr_msgs.max_cnt, rk->rk_curr_msgs.max_size,
@@ -1850,8 +1921,14 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
                     ", "
                     "\"metadata_age\":%" PRId64 ", ",
                     rkt == TAILQ_FIRST(&rk->rk_topics) ? "" : ", ",
-                    RD_KAFKAP_STR_PR(rkt->rkt_topic),
-                    RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                    rkt->rkt_topic_js? rkt->rkt_topic_js->len
+                                     : rkt->rkt_topic->len,
+                    rkt->rkt_topic_js? rkt->rkt_topic_js->str
+                                     : rkt->rkt_topic->str,
+                    rkt->rkt_topic_js? rkt->rkt_topic_js->len
+                                     : rkt->rkt_topic->len,
+                    rkt->rkt_topic_js? rkt->rkt_topic_js->str
+                                     : rkt->rkt_topic->str,
                     (now - rkt->rkt_ts_create) / 1000,
                     rkt->rkt_ts_metadata ? (now - rkt->rkt_ts_metadata) / 1000
                                          : 0);
@@ -2326,6 +2403,13 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         /* Convert group.id to kafka string (may be NULL) */
         rk->rk_group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str, -1);
 
+        rk->rk_name_js      = rd_kafka_make_json_str(rk->rk_name,
+                                                     strlen(rk->rk_name));
+        rk->rk_client_id_js = rd_kafka_make_json_str(rk->rk_client_id->str,
+                                                     rk->rk_client_id->len);
+        rk->rk_group_id_js  = rd_kafka_make_json_str(rk->rk_group_id->str,
+                                                     rk->rk_group_id->len);
+
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
             (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
@@ -2635,7 +2719,7 @@ fail:
                 rd_kafka_assignors_term(rk);
                 rd_list_init(&rk->rk_conf.interceptors.on_conf_set, 0, NULL);
                 rd_list_init(&rk->rk_conf.interceptors.on_conf_dup, 0, NULL);
-                rd_list_init(&rk->rk_conf.interceptors.on_conf_destroy, 
+                rd_list_init(&rk->rk_conf.interceptors.on_conf_destroy,
                              0, NULL);
                 rd_list_init(&rk->rk_conf.interceptors.on_new, 0, NULL);
                 rd_kafka_interceptors_destroy(&rk->rk_conf);

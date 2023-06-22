@@ -113,6 +113,8 @@ void rd_kafka_topic_destroy_final(rd_kafka_topic_t *rkt) {
 
         if (rkt->rkt_topic)
                 rd_kafkap_str_destroy(rkt->rkt_topic);
+        
+        if (rkt->rkt_topic_js) rd_kafkap_str_destroy(rkt->rkt_topic_js);
 
         rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
@@ -334,6 +336,9 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
 
         rkt->rkt_topic = rd_kafkap_str_new(topic, -1);
         rkt->rkt_rk    = rk;
+
+        rkt->rkt_topic_js = rd_kafka_make_json_str(rkt->rkt_topic->str,
+                                                   rkt->rkt_topic->len);
 
         rkt->rkt_ts_create = rd_clock();
 

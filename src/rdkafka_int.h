@@ -278,6 +278,10 @@ struct rd_kafka_s {
         char rk_name[128];
         rd_kafkap_str_t *rk_client_id;
         rd_kafkap_str_t *rk_group_id; /* Consumer group id */
+        
+        rd_kafkap_str_t *rk_name_js;
+        rd_kafkap_str_t *rk_client_id_js;
+        rd_kafkap_str_t *rk_group_id_js;
 
         rd_atomic32_t rk_terminate; /**< Set to RD_KAFKA_DESTROY_F_..
                                      *   flags instance
@@ -1050,5 +1054,17 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
 
+
+/**
+ * @brief   JSON-ifies the specified string with the appropriate JSON escape
+ *          sequences, if necessary.
+ *
+ * @returns If the specified str contains characters that must be
+ *          escaped in JSON, return a new rd_kafkap_str_t* containing the JSON-
+ *          escaped strings. If the specified str does not contaim any
+ *          characters that must be escaped in JSON (assumed to be the usual
+ *          case), return NULL.
+ */
+rd_kafkap_str_t* rd_kafka_make_json_str(char const* str, size_t len);
 
 #endif /* _RDKAFKA_INT_H_ */
