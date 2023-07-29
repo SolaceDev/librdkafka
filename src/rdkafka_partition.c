@@ -1086,6 +1086,13 @@ void rd_kafka_toppar_broker_leave_for_remove(rd_kafka_toppar_t *rktp) {
                 rd_kafka_toppar_set_fetch_state(
                     rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
+        /* Purge any stale operations on the fetchq; nothing will serve them
+         * at this point. */
+        if (!rd_kafka_q_is_fwded(rktp->rktp_fetchq)) {
+                rd_kafka_q_disable(rktp->rktp_fetchq);
+                rd_kafka_q_purge(rktp->rktp_fetchq);
+        }
+
         rko           = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_LEAVE);
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 

@@ -518,7 +518,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "`fetch.wait.max.ms` + `socket.timeout.ms`. "
      "Admin: Admin requests will use `socket.timeout.ms` or explicitly "
      "set `rd_kafka_AdminOptions_set_operation_timeout()` value.",
-     10, 300 * 1000, 60 * 1000},
+     10, 301 * 1000, 60 * 1000},
     {_RK_GLOBAL | _RK_DEPRECATED, "socket.blocking.max.ms", _RK_C_INT,
      _RK(socket_blocking_max_ms), "No longer used.", 1, 60 * 1000, 1000},
     {_RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT, _RK(socket_sndbuf_size),
