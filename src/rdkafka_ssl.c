@@ -414,7 +414,7 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
                                   sizeof(subject));
                 X509_NAME_oneline(X509_get_issuer_name(cert), issuer,
                                   sizeof(issuer));
-                rd_rkb_log(rkb, LOG_ERR, "SSLCERTVRFY",
+                rd_rkb_log(rkb, LOG_WARNING, "SSLCERTVRFY",
                            "Certificate (subject=%s, issuer=%s) verification "
                            "callback failed: %s",
                            subject, issuer, errstr);
@@ -582,14 +582,14 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
 #endif
         X509_free(cert);
         if (!cert) {
-                rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
+                rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_WARNING,
                                      RD_KAFKA_RESP_ERR__SSL,
                                      "Broker did not provide a certificate");
                 return -1;
         }
 
         if ((rl = SSL_get_verify_result(rktrans->rktrans_ssl)) != X509_V_OK) {
-                rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
+                rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_WARNING,
                                      RD_KAFKA_RESP_ERR__SSL,
                                      "Failed to verify broker certificate: %s",
                                      X509_verify_cert_error_string(rl));
@@ -661,7 +661,7 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
                         err = RD_KAFKA_RESP_ERR__TRANSPORT;
                 }
 
-                rd_kafka_broker_fail(rkb, LOG_ERR, err,
+                rd_kafka_broker_fail(rkb, LOG_WARNING, err,
                                      "SSL handshake failed: %s%s", errstr,
                                      extra);
                 return -1;

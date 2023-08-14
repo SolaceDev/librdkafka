@@ -701,7 +701,7 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
 
                 if (socket_errstr)
                         rd_kafka_broker_fail(
-                            rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
+                            rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__TRANSPORT,
                             "Connect to %s failed: %s",
                             rd_sockaddr2str(rkb->rkb_addr_last,
                                             RD_SOCKADDR2STR_F_PORT |
@@ -761,7 +761,7 @@ static void rd_kafka_transport_io_event(rd_kafka_transport_t *rktrans,
                 if (rd_kafka_sasl_io_event(rktrans, events, errstr,
                                            sizeof(errstr)) == -1) {
                         rd_kafka_broker_fail(
-                            rkb, LOG_ERR, RD_KAFKA_RESP_ERR__AUTHENTICATION,
+                            rkb, LOG_WARNING, RD_KAFKA_RESP_ERR__AUTHENTICATION,
                             "SASL authentication failure: %s", errstr);
                         return;
                 }

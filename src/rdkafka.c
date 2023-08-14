@@ -843,7 +843,7 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
          * will be automatically logged, and this check here
          * prevents us from duplicate logs. */
         if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_ERROR)
-                rd_kafka_log(rk, LOG_EMERG, "FATAL", "Fatal error: %s: %s",
+                rd_kafka_log(rk, LOG_WARNING, "FATAL", "Fatal error: %s: %s",
                              rd_kafka_err2str(err), rk->rk_fatal.errstr);
         else
                 rd_kafka_dbg(rk, ALL, "FATAL", "Fatal error: %s: %s",

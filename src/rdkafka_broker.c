@@ -939,7 +939,7 @@ static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                                     1000.0f));
                         else
                                 rttinfo[0] = 0;
-                        rd_kafka_broker_fail(rkb, LOG_ERR,
+                        rd_kafka_broker_fail(rkb, LOG_WARNING,
                                              RD_KAFKA_RESP_ERR__TIMED_OUT,
                                              "%i request(s) timed out: "
                                              "disconnect%s",

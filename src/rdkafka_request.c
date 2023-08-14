@@ -2622,7 +2622,7 @@ err_parse:
                     rd_kafka_err2str(err));
 
 err:
-        rd_kafka_broker_fail(rkb, LOG_ERR, err, "SASL authentication error: %s",
+        rd_kafka_broker_fail(rkb, LOG_WARNING, err, "SASL authentication error: %s",
                              errstr);
 }
 
