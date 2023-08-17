@@ -450,6 +450,10 @@ struct rd_kafka_conf_s {
                           const rd_kafka_message_t *rkmessage,
                           void *opaque);
 
+        void (*notifyretry_cb)(rd_kafka_t *rk,
+                               const rd_kafka_message_t *rkmessage,
+                               void *opaque);
+
         /* Consume callback */
         void (*consume_cb)(rd_kafka_message_t *rkmessage, void *opaque);
 

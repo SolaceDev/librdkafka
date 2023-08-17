@@ -3341,7 +3341,7 @@ static int rd_kafka_handle_Produce_error(rd_kafka_broker_t *rkb,
                  * would exceeded the retry count will not be
                  * moved but instead fail below. */
                 rd_kafka_toppar_retry_msgq(rktp, &batch->msgq, perr->incr_retry,
-                                           perr->status);
+                                           perr->status, perr->err);
 
                 if (rd_kafka_msgq_len(&batch->msgq) == 0) {
                         /* No need do anything more with the request

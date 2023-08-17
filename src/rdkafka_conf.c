@@ -1432,6 +1432,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Delivery report callback (set with rd_kafka_conf_set_dr_cb())"},
     {_RK_GLOBAL | _RK_PRODUCER, "dr_msg_cb", _RK_C_PTR, _RK(dr_msg_cb),
      "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())"},
+    {_RK_GLOBAL | _RK_PRODUCER, "notifyretry_cb", _RK_C_PTR,
+     _RK(notifyretry_cb),
+     "Retry nofity callback (set with rd_kafka_conf_set_notifyretry_cb())"},
     {_RK_GLOBAL | _RK_PRODUCER, "sticky.partitioning.linger.ms", _RK_C_INT,
      _RK(sticky_partition_linger_ms),
      "Delay in milliseconds to wait to assign new sticky partitions for "
@@ -2683,6 +2686,18 @@ void rd_kafka_conf_set_dr_msg_cb(
                       const rd_kafka_message_t *rkmessage,
                       void *opaque)) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "dr_msg_cb", dr_msg_cb);
+}
+
+
+void rd_kafka_conf_set_notifyretry_cb(
+    rd_kafka_conf_t *conf,
+    void (*notifyretry_cb)(rd_kafka_t *rk,
+                           const rd_kafka_message_t *rkmessage,
+                           void *opaque)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL,
+                                      conf,
+                                      "notifyretry_cb",
+                                      notifyretry_cb);
 }
 
 

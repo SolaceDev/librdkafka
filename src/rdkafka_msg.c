@@ -1292,9 +1292,12 @@ rd_kafka_message_setup(rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
         rd_kafka_topic_t *rkt;
         rd_kafka_toppar_t *rktp = NULL;
 
-        if (rko->rko_type == RD_KAFKA_OP_DR) {
+        switch(rko->rko_type) {
+        case RD_KAFKA_OP_DR:
+        case RD_KAFKA_OP_NOTIFYRETRY:
                 rkt = rko->rko_u.dr.rkt;
-        } else {
+                break;
+        default:
                 if (rko->rko_rktp) {
                         rktp = rko->rko_rktp;
                         rkt  = rktp->rktp_rkt;
@@ -1302,8 +1305,8 @@ rd_kafka_message_setup(rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
                         rkt = NULL;
 
                 rkmessage->_private = rko;
+                break;
         }
-
 
         if (!rkmessage->rkt && rkt)
                 rkmessage->rkt = rd_kafka_topic_keep(rkt);
@@ -2033,8 +2036,9 @@ static int unittest_msgq_order(const char *what,
 
         /* Retry the messages, which moves them back to sendq
          * maintaining the original order */
-        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+        rd_kafka_retry_msgq(NULL, &rkmq, &sendq, 1, 1, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, 
+                            RD_KAFKA_RESP_ERR_NO_ERROR, cmp);
 
         RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
                      "sendq FIFO should be empty, not contain %d messages",
@@ -2073,8 +2077,9 @@ static int unittest_msgq_order(const char *what,
 
         /* Retry the messages, which should now keep the 3 first messages
          * on sendq (no more retries) and just number 4 moved back. */
-        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+        rd_kafka_retry_msgq(NULL, &rkmq, &sendq, 1, 1, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, 
+                            RD_KAFKA_RESP_ERR_NO_ERROR, cmp);
 
         if (fifo) {
                 if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6, rd_true))
@@ -2094,8 +2099,9 @@ static int unittest_msgq_order(const char *what,
         }
 
         /* Move all messages back on rkmq */
-        rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+        rd_kafka_retry_msgq(NULL, &rkmq, &sendq, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED,
+                            RD_KAFKA_RESP_ERR_NO_ERROR, cmp);
 
 
         /* Move first half of messages to sendq (1,2,3).
@@ -2116,10 +2122,12 @@ static int unittest_msgq_order(const char *what,
         rkm->rkm_u.producer.msgid = i;
         rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
 
-        rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
-        rd_kafka_retry_msgq(&rkmq, &sendq2, 0, 1000, 0,
-                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+        rd_kafka_retry_msgq(NULL, &rkmq, &sendq, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED,
+                            RD_KAFKA_RESP_ERR_NO_ERROR, cmp);
+        rd_kafka_retry_msgq(NULL, &rkmq, &sendq2, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, 
+                            RD_KAFKA_RESP_ERR_NO_ERROR, cmp);
 
         RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
                      "sendq FIFO should be empty, not contain %d messages",

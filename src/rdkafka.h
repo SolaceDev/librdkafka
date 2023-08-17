@@ -1858,6 +1858,32 @@ void rd_kafka_conf_set_dr_msg_cb(
 
 
 /**
+ * @brief \b Producer: Set retry-notify callback in provided \p conf object.
+ *
+ * The retry-notify callback will be called once for each message
+ * accepted by rd_kafka_produce() (et.al), for which librdkafka is retrying
+ * production; \p err is st to the reason a retry is necessary.
+ *
+ * An application must call rd_kafka_poll() at regular intervals to
+ * serve queued retry-motify callbacks.
+ *
+ * The \p notifyretry_cb callback can be called any number of times for
+ * the same message before an eventual delivery report callback.
+ *
+ * The \p notifyretry_cb \c opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ * The per-message msg_opaque value is available in
+ * \c rd_kafka_message_t._private. The \p rd_kafka_message_t metadata fields
+ * are set, but its \p payload and \key fields are null. 
+ */
+RD_EXPORT
+void rd_kafka_conf_set_notifyretry_cb(
+    rd_kafka_conf_t *conf,
+    void (*notifyretry_cb)(rd_kafka_t *rk,
+                           const rd_kafka_message_t *rkmessage,
+                           void *opaque));
+
+/**
  * @brief \b Consumer: Set consume callback for use with
  *        rd_kafka_consumer_poll()
  *

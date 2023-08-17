@@ -4078,6 +4078,40 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_purge(rk, rko->rko_u.purge.flags);
                 break;
 
+        case RD_KAFKA_OP_NOTIFYRETRY:
+                /* Delivery report:
+                 * call application DR callback for each message. */
+                while ((rkm = TAILQ_FIRST(&rko->rko_u.dr.msgq.rkmq_msgs))) {
+                        rd_kafka_message_t *rkmessage;
+
+                        TAILQ_REMOVE(&rko->rko_u.dr.msgq.rkmq_msgs, rkm,
+                                     rkm_link);
+
+                        rkmessage = rd_kafka_message_get_from_rkm(rko, rkm);
+
+                        if (likely(rk->rk_conf.notifyretry_cb != NULL)) {
+                                rk->rk_conf.notifyretry_cb(rk, rkmessage,
+                                                           rk->rk_conf.opaque);
+                        }
+
+                        rd_kafka_msg_destroy(rk, rkm);
+
+                        if (unlikely(rd_kafka_yield_thread)) {
+                                /* Callback called yield(),
+                                 * re-enqueue the op (if there are any
+                                 * remaining messages). */
+                                if (!TAILQ_EMPTY(&rko->rko_u.dr.msgq.rkmq_msgs))
+                                        rd_kafka_q_reenq(rkq, rko);
+                                else
+                                        rd_kafka_op_destroy(rko);
+                                return RD_KAFKA_OP_RES_YIELD;
+                        }
+                }
+
+                rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
+
+                break;
+
         default:
                 /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
                  * call it. */

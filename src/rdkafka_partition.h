@@ -544,12 +544,14 @@ void rd_kafka_toppar_insert_msg(rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_enq_msg(rd_kafka_toppar_t *rktp,
                              rd_kafka_msg_t *rkm,
                              rd_ts_t now);
-int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
+int rd_kafka_retry_msgq(rd_kafka_toppar_t *rktp,
+                        rd_kafka_msgq_t *destq,
                         rd_kafka_msgq_t *srcq,
                         int incr_retry,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
+                        rd_kafka_resp_err_t err,
                         int (*cmp)(const void *a, const void *b));
 void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
                                rd_kafka_msgq_t *srcq,
@@ -557,7 +559,8 @@ void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
 int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                rd_kafka_msgq_t *rkmq,
                                int incr_retry,
-                               rd_kafka_msg_status_t status);
+                               rd_kafka_msg_status_t status,
+                               rd_kafka_resp_err_t err);
 void rd_kafka_toppar_insert_msgq(rd_kafka_toppar_t *rktp,
                                  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,

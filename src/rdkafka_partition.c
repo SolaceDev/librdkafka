@@ -865,6 +865,52 @@ void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
         rd_assert(RD_KAFKA_MSGQ_EMPTY(srcq));
 }
 
+/**
+ * @brief Copies messages from \p rkmq into a \p RD_KAFKA_OP_NOTIFYRETRY
+ *        operation, then enqueues that operation.
+ */
+static void rd_kafka_notifyretry_msgq(rd_kafka_toppar_t *rktp,
+                                      rd_kafka_msgq_t *rkmq,
+                                      rd_kafka_resp_err_t err) {
+        rd_kafka_topic_t *rkt = rktp->rktp_rkt;
+        rd_kafka_t *rk = rkt->rkt_rk;
+        rd_kafka_op_t *rko;
+        rd_kafka_msg_t *rkm;
+
+        if (rd_kafka_msgq_len(rkmq) == 0)
+                return;
+        
+        if (!rk->rk_conf.notifyretry_cb)
+                return;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_NOTIFYRETRY);
+        rko->rko_err        = err;
+        rko->rko_u.dr.rkt   = rd_kafka_topic_keep(rkt);
+        rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
+        
+        RD_KAFKA_MSGQ_FOREACH(rkm, rkmq) {
+                rd_kafka_msg_t *nrkm;
+                int msgflags = rkm->rkm_flags;
+                msgflags &= ~(RD_KAFKA_MSG_F_COPY | RD_KAFKA_MSG_F_FREE
+                    | RD_KAFKA_MSG_F_ACCOUNT);
+                msgflags |= RD_KAFKA_MSG_F_FREE_RKM | RD_KAFKA_MSG_F_PRODUCER;
+                nrkm = rd_calloc(1, sizeof(rd_kafka_msg_t));
+                nrkm->rkm_err                 = err;
+                nrkm->rkm_rkmessage.rkt       = rd_kafka_topic_keep(rkt);
+                nrkm->rkm_rkmessage.partition = rkm->rkm_rkmessage.partition;
+                nrkm->rkm_offset              = rkm->rkm_offset;
+                nrkm->rkm_rkmessage._private  = rkm->rkm_rkmessage._private;
+                nrkm->rkm_flags               = msgflags;
+                nrkm->rkm_tstype              = rkm->rkm_tstype;
+                nrkm->rkm_timestamp           = rkm->rkm_timestamp;
+                nrkm->rkm_status              = rkm->rkm_status;
+                nrkm->rkm_broker_id           = rkm->rkm_broker_id;
+                nrkm->rkm_u.producer          = rkm->rkm_u.producer;
+                rd_kafka_msgq_enq(&rko->rko_u.dr.msgq, nrkm);
+        }
+
+        rd_kafka_q_enq(rk->rk_rep, rko);
+}
 
 /**
  * @brief Inserts messages from \p srcq according to their sorted position
@@ -877,12 +923,14 @@ void rd_kafka_msgq_insert_msgq(rd_kafka_msgq_t *destq,
  * @returns 0 if all messages were retried, or 1 if some messages
  *          could not be retried.
  */
-int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
+int rd_kafka_retry_msgq(rd_kafka_toppar_t *rktp,
+                        rd_kafka_msgq_t *destq,
                         rd_kafka_msgq_t *srcq,
                         int incr_retry,
                         int max_retries,
                         rd_ts_t backoff,
                         rd_kafka_msg_status_t status,
+                        rd_kafka_resp_err_t err,
                         int (*cmp)(const void *a, const void *b)) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
@@ -917,6 +965,9 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
         if (RD_KAFKA_MSGQ_EMPTY(&retryable))
                 return 0;
 
+        if (rktp)
+                rd_kafka_notifyretry_msgq(rktp, &retryable, err);
+
         /* Insert retryable list at sorted position */
         rd_kafka_msgq_insert_msgq(destq, &retryable, cmp);
 
@@ -939,7 +990,8 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
 int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                                rd_kafka_msgq_t *rkmq,
                                int incr_retry,
-                               rd_kafka_msg_status_t status) {
+                               rd_kafka_msg_status_t status,
+                               rd_kafka_resp_err_t err) {
         rd_kafka_t *rk  = rktp->rktp_rkt->rkt_rk;
         rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
         int r;
@@ -948,8 +1000,8 @@ int rd_kafka_toppar_retry_msgq(rd_kafka_toppar_t *rktp,
                 return 1;
 
         rd_kafka_toppar_lock(rktp);
-        r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq, incr_retry,
-                                rk->rk_conf.max_retries, backoff, status,
+        r = rd_kafka_retry_msgq(rktp, &rktp->rktp_msgq, rkmq, incr_retry,
+                                rk->rk_conf.max_retries, backoff, status, err,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp);
         rd_kafka_toppar_unlock(rktp);
 
