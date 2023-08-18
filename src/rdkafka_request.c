@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -134,6 +135,7 @@ int rd_kafka_err_action(rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_RESP_ERR__TRANSPORT:
+        case RD_KAFKA_RESP_ERR__SSL:
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
@@ -1765,7 +1767,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(
                     rkas, rk->rk_cgrp->rkcg_assignor_state, topics,
-                    rk->rk_cgrp->rkcg_group_assignment);
+                    rk->rk_cgrp->rkcg_group_assignment,
+                    rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
@@ -2084,9 +2087,9 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        rd_kafka_op_t *rko           = opaque; /* Possibly NULL */
-        struct rd_kafka_metadata *md = NULL;
-        const rd_list_t *topics      = request->rkbuf_u.Metadata.topics;
+        rd_kafka_op_t *rko                = opaque; /* Possibly NULL */
+        rd_kafka_metadata_internal_t *mdi = NULL;
+        const rd_list_t *topics           = request->rkbuf_u.Metadata.topics;
         int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -2113,21 +2116,21 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                            rd_list_cnt(topics),
                            request->rkbuf_u.Metadata.reason);
 
-        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md);
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &mdi);
         if (err)
                 goto err;
 
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_err           = err;
-                rko->rko_u.metadata.md = md;
-
+                rko->rko_err            = err;
+                rko->rko_u.metadata.md  = &mdi->metadata;
+                rko->rko_u.metadata.mdi = mdi;
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
         } else {
-                if (md)
-                        rd_free(md);
+                if (mdi)
+                        rd_free(mdi);
         }
 
         goto done;
@@ -2153,8 +2156,9 @@ err:
                            rd_kafka_actions2str(actions));
                 /* Respond back to caller on non-retriable errors */
                 if (rko && rko->rko_replyq.q) {
-                        rko->rko_err           = err;
-                        rko->rko_u.metadata.md = NULL;
+                        rko->rko_err            = err;
+                        rko->rko_u.metadata.md  = NULL;
+                        rko->rko_u.metadata.mdi = NULL;
                         rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                         rko = NULL;
                 }
@@ -2185,6 +2189,8 @@ done:
  *                                   This is best-effort, depending on broker
  *                                   config and version.
  * @param cgrp_update - Update cgrp in parse_Metadata (see comment there).
+ * @param force_racks - Force partition to rack mapping computation in
+ *                      parse_Metadata (see comment there).
  * @param rko       - (optional) rko with replyq for handling response.
  *                    Specifying an rko forces a metadata request even if
  *                    there is already a matching one in-transit.
@@ -2200,6 +2206,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
@@ -2220,6 +2227,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
 
         rkbuf->rkbuf_u.Metadata.reason      = rd_strdup(reason);
         rkbuf->rkbuf_u.Metadata.cgrp_update = cgrp_update;
+        rkbuf->rkbuf_u.Metadata.force_racks = force_racks;
 
         /* TopicArrayCnt */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
@@ -2602,7 +2610,19 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                 goto err;
         }
 
-        rd_kafka_buf_read_bytes(rkbuf, &auth_data);
+        rd_kafka_buf_read_kbytes(rkbuf, &auth_data);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1) {
+                int64_t session_lifetime_ms;
+                rd_kafka_buf_read_i64(rkbuf, &session_lifetime_ms);
+
+                if (session_lifetime_ms)
+                        rd_kafka_dbg(
+                            rk, SECURITY, "REAUTH",
+                            "Received session lifetime %ld ms from broker",
+                            session_lifetime_ms);
+                rd_kafka_broker_start_reauth_timer(rkb, session_lifetime_ms);
+        }
 
         /* Pass SASL auth frame to SASL handler */
         if (rd_kafka_sasl_recv(rkb->rkb_transport, auth_data.data,
@@ -2637,6 +2657,8 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
                                       rd_kafka_resp_cb_t *resp_cb,
                                       void *opaque) {
         rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        int features;
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
 
@@ -2650,6 +2672,10 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb,
@@ -4188,7 +4214,7 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AlterConfigs, 0, 1, NULL);
+            rkb, RD_KAFKAP_AlterConfigs, 0, 2, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AlterConfigs (KIP-133) not supported "
@@ -4197,52 +4223,37 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        /* Incremental requires IncrementalAlterConfigs */
-        if (rd_kafka_confval_get_int(&options->incremental)) {
-                rd_snprintf(errstr, errstr_size,
-                            "AlterConfigs.incremental=true (KIP-248) "
-                            "not supported by broker, "
-                            "replaced by IncrementalAlterConfigs");
-                rd_kafka_replyq_destroy(&replyq);
-                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-        }
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AlterConfigs, 1,
+                                                 rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 2);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_AlterConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
-
-        /* #resources */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+        /* #Resources */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
                 int ei;
 
-                /* resource_type */
+                /* ResourceType */
                 rd_kafka_buf_write_i8(rkbuf, config->restype);
 
-                /* resource_name */
+                /* ResourceName */
                 rd_kafka_buf_write_str(rkbuf, config->name, -1);
 
-                /* #config */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&config->config));
+                /* #Configs */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
-                        /* config_name */
+                        /* Name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
-                        /* config_value (nullable) */
+                        /* Value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
 
-                        if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
-                                rd_snprintf(errstr, errstr_size,
-                                            "IncrementalAlterConfigs required "
-                                            "for add/delete config "
-                                            "entries: only set supported "
-                                            "by this operation");
-                                rd_kafka_buf_destroy(rkbuf);
-                                rd_kafka_replyq_destroy(&replyq);
-                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
-                        }
+                        rd_kafka_buf_write_tags(rkbuf);
                 }
+
+                rd_kafka_buf_write_tags(rkbuf);
         }
 
         /* timeout */
@@ -4261,6 +4272,89 @@ rd_kafka_AlterConfigsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+rd_kafka_resp_err_t rd_kafka_IncrementalAlterConfigsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *configs /*(ConfigResource_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i;
+        const rd_kafka_ConfigResource_t *config;
+        int op_timeout;
+
+        if (rd_list_cnt(configs) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No config resources specified");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "IncrementalAlterConfigs (KIP-339) not supported "
+                            "by broker, requires broker version >= 2.3.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_IncrementalAlterConfigs, 1,
+            rd_list_cnt(configs) * 200, ApiVersion >= 1);
+
+        /* #Resources */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
+
+        RD_LIST_FOREACH(config, configs, i) {
+                const rd_kafka_ConfigEntry_t *entry;
+                int ei;
+
+                /* ResourceType */
+                rd_kafka_buf_write_i8(rkbuf, config->restype);
+
+                /* ResourceName */
+                rd_kafka_buf_write_str(rkbuf, config->name, -1);
+
+                /* #Configs */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&config->config));
+
+                RD_LIST_FOREACH(entry, &config->config, ei) {
+                        /* Name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                        /* ConfigOperation */
+                        rd_kafka_buf_write_i8(rkbuf, entry->a.op_type);
+                        /* Value (nullable) */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+
+                        rd_kafka_buf_write_tags(rkbuf);
+                }
+
+                rd_kafka_buf_write_tags(rkbuf);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        /* ValidateOnly */
+        rd_kafka_buf_write_i8(
+            rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * @brief Construct and send DescribeConfigsRequest to \p rkb

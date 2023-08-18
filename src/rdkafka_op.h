@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -126,17 +127,20 @@ typedef enum {
         RD_KAFKA_OP_DELETETOPICS, /**< Admin: DeleteTopics: u.admin_request*/
         RD_KAFKA_OP_CREATEPARTITIONS, /**< Admin: CreatePartitions:
                                        *   u.admin_request*/
-        RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
-        RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs:
-                                      *   u.admin_request*/
-        RD_KAFKA_OP_DELETERECORDS,   /**< Admin: DeleteRecords:
-                                      *   u.admin_request*/
-        RD_KAFKA_OP_LISTCONSUMERGROUPS,     /**< Admin:
-                                             *   ListConsumerGroups
-                                             *   u.admin_request */
-        RD_KAFKA_OP_DESCRIBECONSUMERGROUPS, /**< Admin:
-                                             *   DescribeConsumerGroups
-                                             *   u.admin_request */
+        RD_KAFKA_OP_ALTERCONFIGS, /**< Admin: AlterConfigs: u.admin_request*/
+        RD_KAFKA_OP_INCREMENTALALTERCONFIGS, /**< Admin:
+                                              *    IncrementalAlterConfigs:
+                                              *    u.admin_request */
+        RD_KAFKA_OP_DESCRIBECONFIGS,         /**< Admin: DescribeConfigs:
+                                              *   u.admin_request*/
+        RD_KAFKA_OP_DELETERECORDS,           /**< Admin: DeleteRecords:
+                                              *   u.admin_request*/
+        RD_KAFKA_OP_LISTCONSUMERGROUPS,      /**< Admin:
+                                              *   ListConsumerGroups
+                                              *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,  /**< Admin:
+                                              *   DescribeConsumerGroups
+                                              *   u.admin_request */
         RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
@@ -161,6 +165,13 @@ typedef enum {
         RD_KAFKA_OP_GET_REBALANCE_PROTOCOL,    /**< Get rebalance protocol */
         RD_KAFKA_OP_LEADERS,                   /**< Partition leader query */
         RD_KAFKA_OP_BARRIER,                   /**< Version barrier bump */
+        RD_KAFKA_OP_SASL_REAUTH, /**< Sasl reauthentication for broker */
+        RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS, /* < Admin:
+                                                     DescribeUserScramCredentials
+                                                     u.admin_request >*/
+        RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,    /* < Admin:
+                                                     AlterUserScramCredentials
+                                                     u.admin_request >*/
         RD_KAFKA_OP_NOTIFYRETRY,               /**< Notify of produce retry */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
@@ -371,6 +382,7 @@ struct rd_kafka_op_s {
                 /* RD_KAFKA_OP_METADATA */
                 struct {
                         rd_kafka_metadata_t *md;
+                        rd_kafka_metadata_internal_t *mdi;
                         int force; /* force request regardless of outstanding
                                     * metadata requests. */
                 } metadata;
@@ -519,6 +531,7 @@ struct rd_kafka_op_s {
                                             *
                                             * (rd_kafka_ConfigResource_t *):
                                             * AlterConfigs, DescribeConfigs
+                                            * IncrementalAlterConfigs
                                             */
 
                         void *opaque; /**< Application's opaque as set by

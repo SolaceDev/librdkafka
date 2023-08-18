@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -703,7 +704,6 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE,
               "Broker: Request principal deserialization failed during "
               "forwarding"),
-
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -994,7 +994,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_init_lock);
 
         if (rk->rk_full_metadata)
-                rd_kafka_metadata_destroy(rk->rk_full_metadata);
+                rd_kafka_metadata_destroy(&rk->rk_full_metadata->metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
 
@@ -2611,7 +2611,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
         /* Add initial list of brokers from configuration */
         if (rk->rk_conf.brokerlist) {
-                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist) == 0)
+                if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist,
+                                          rd_true) == 0)
                         rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                                         "No brokers configured");
         }
@@ -4045,6 +4046,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_DELETETOPICS:
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
+        case RD_KAFKA_OP_INCREMENTALALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
         case RD_KAFKA_OP_DELETERECORDS:
         case RD_KAFKA_OP_DELETEGROUPS:
@@ -4133,9 +4135,17 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
 int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rk->rk_rep, RD_DO_LOCK);
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rk);
 
         r = rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0, RD_KAFKA_Q_CB_CALLBACK,
                              rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rk);
 
         return r;
 }
@@ -4143,9 +4153,18 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms) {
 
 rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
+
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, rd_timeout_us(timeout_ms), 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         if (!rko)
                 return NULL;
@@ -4155,9 +4174,17 @@ rd_kafka_event_t *rd_kafka_queue_poll(rd_kafka_queue_t *rkqu, int timeout_ms) {
 
 int rd_kafka_queue_poll_callback(rd_kafka_queue_t *rkqu, int timeout_ms) {
         int r;
+        const rd_bool_t can_q_contain_fetched_msgs =
+            rd_kafka_q_can_contain_fetched_msgs(rkqu->rkqu_q, RD_DO_LOCK);
+
+        if (timeout_ms && can_q_contain_fetched_msgs)
+                rd_kafka_app_poll_blocking(rkqu->rkqu_rk);
 
         r = rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
                              RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+
+        if (can_q_contain_fetched_msgs)
+                rd_kafka_app_polled(rkqu->rkqu_rk);
 
         return r;
 }
@@ -4796,8 +4823,8 @@ static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                         rd_kafka_buf_read_str(reply, &MemberId);
                         rd_kafka_buf_read_str(reply, &ClientId);
                         rd_kafka_buf_read_str(reply, &ClientHost);
-                        rd_kafka_buf_read_bytes(reply, &Meta);
-                        rd_kafka_buf_read_bytes(reply, &Assignment);
+                        rd_kafka_buf_read_kbytes(reply, &Meta);
+                        rd_kafka_buf_read_kbytes(reply, &Assignment);
 
                         mi->member_id   = RD_KAFKAP_STR_DUP(&MemberId);
                         mi->client_id   = RD_KAFKAP_STR_DUP(&ClientId);

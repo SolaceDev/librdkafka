@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill,
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1565,8 +1566,8 @@ rd_kafka_message_status(const rd_kafka_message_t *rkmessage) {
 
 int32_t rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage) {
         rd_kafka_msg_t *rkm;
-
-        if (unlikely(!rkmessage->rkt ||
+        if (unlikely(!rkmessage->rkt || rd_kafka_rkt_is_lw(rkmessage->rkt) ||
+                     !rkmessage->rkt->rkt_rk ||
                      rkmessage->rkt->rkt_rk->rk_type != RD_KAFKA_CONSUMER))
                 return -1;
 

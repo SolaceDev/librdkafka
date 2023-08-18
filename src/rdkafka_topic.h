@@ -1,7 +1,8 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012,2013 Magnus Edenhill
+ * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -259,7 +260,7 @@ rd_kafka_topic_get_error(rd_kafka_topic_t *rkt) {
 int rd_kafka_topic_metadata_update2(
     rd_kafka_broker_t *rkb,
     const struct rd_kafka_metadata_topic *mdt,
-    const rd_kafka_partition_leader_epoch_t *leader_epochs);
+    const rd_kafka_metadata_topic_internal_t *mdit);
 
 void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 
@@ -267,12 +268,17 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now);
 typedef struct rd_kafka_topic_info_s {
         const char *topic; /**< Allocated along with struct */
         int partition_cnt;
+        rd_kafka_metadata_partition_internal_t *partitions_internal;
 } rd_kafka_topic_info_t;
 
 int rd_kafka_topic_info_topic_cmp(const void *_a, const void *_b);
 int rd_kafka_topic_info_cmp(const void *_a, const void *_b);
 rd_kafka_topic_info_t *rd_kafka_topic_info_new(const char *topic,
                                                int partition_cnt);
+rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
+    const char *topic,
+    int partition_cnt,
+    const rd_kafka_metadata_partition_internal_t *mdpi);
 void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti);
 
 int rd_kafka_topic_match(rd_kafka_t *rk,
