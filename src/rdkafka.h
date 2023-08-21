@@ -3145,6 +3145,29 @@ void *rd_kafka_topic_opaque(const rd_kafka_topic_t *rkt);
 
 
 /**
+ * @brief Finds an existing topic handle for topic named \p topic.
+ *
+ * Applications must eventually call rd_kafka_topic_destroy() for any returned
+ * topic handle.
+ *
+ * @returns the existing topic handle or NULL.
+ */
+RD_EXPORT
+rd_kafka_topic_t* rd_kafka_topic_find_existing(rd_kafka_t* rk,
+                                               const char* topic);
+
+/**
+ * @brief Returns configuration for topic handle \p rkt.
+ *
+ * The returned topic configuration can be used in rd_kafka_topic_conf_get(),
+ * but cannot be modified or destroyed.
+ *
+ * @returns topic configuration
+ */
+RD_EXPORT
+const rd_kafka_topic_conf_t* rd_kafka_topic_conf(const rd_kafka_topic_t* rkt);
+
+/**
  * @brief Unassigned partition.
  *
  * The unassigned partition is used by the producer API for messages

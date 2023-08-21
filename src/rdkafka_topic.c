@@ -535,7 +535,31 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk,
         return rkt;
 }
 
+/**
+ * @brief Find existing app topic handle.
+ *
+ * @locality application thread
+ */
+rd_kafka_topic_t* rd_kafka_topic_find_existing(rd_kafka_t* rk,
+                                               const char* topic) {
+        rd_kafka_topic_t* rkt = rd_kafka_topic_find(rk, topic, 1);
+        if (rkt == NULL) return NULL;
 
+        /* Increase application refcount. */
+        rd_kafka_topic_keep_app(rkt);
+        /* Drop our reference since there is now an app refcnt */
+        rd_kafka_topic_destroy0(rkt);
+        return rkt;
+}
+
+/**
+ * @brief Returns configuration for topic handle.
+ */
+const rd_kafka_topic_conf_t* rd_kafka_topic_conf(const rd_kafka_topic_t* rkt) {
+    if (!rkt)
+            return NULL;
+    return &rkt->rkt_conf;
+}
 
 /**
  * Sets the state for topic.
