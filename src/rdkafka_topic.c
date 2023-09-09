@@ -1225,6 +1225,18 @@ rd_bool_t rd_kafka_topic_set_notexists(rd_kafka_topic_t *rkt,
 }
 
 /**
+ * @brief Returns metadata or permanent error for topic handle \p rkt.
+ *
+ * @returns metadata or permanent error for topic handle
+ *
+ * @locality any
+ */
+rd_kafka_resp_err_t rd_kafka_topic_err(const rd_kafka_topic_t* rkt) {
+    if (!rkt) return RD_KAFKA_RESP_ERR_NO_ERROR;
+    return rkt->rkt_err;
+}
+
+/**
  * @brief Mark topic as errored, such as when topic authorization fails.
  *
  * @param err Propagate error using this error code.

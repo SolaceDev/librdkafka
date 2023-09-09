@@ -3168,6 +3168,14 @@ RD_EXPORT
 const rd_kafka_topic_conf_t* rd_kafka_topic_conf(const rd_kafka_topic_t* rkt);
 
 /**
+ * @brief Returns metadata or permanent error for topic handle \p rkt.
+ *
+ * @returns metadata or permanent error for topic handle
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_topic_err(const rd_kafka_topic_t* rkt);
+
+/**
  * @brief Unassigned partition.
  *
  * The unassigned partition is used by the producer API for messages

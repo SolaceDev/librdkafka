@@ -1919,7 +1919,8 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
                     "\"topic\":\"%.*s\", "
                     "\"age\":%" PRId64
                     ", "
-                    "\"metadata_age\":%" PRId64 ", ",
+                    "\"metadata_age\":%" PRId64 ", "
+                    "\"err\":\"%s\", ",
                     rkt == TAILQ_FIRST(&rk->rk_topics) ? "" : ", ",
                     rkt->rkt_topic_js? rkt->rkt_topic_js->len
                                      : rkt->rkt_topic->len,
@@ -1931,7 +1932,9 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
                                      : rkt->rkt_topic->str,
                     (now - rkt->rkt_ts_create) / 1000,
                     rkt->rkt_ts_metadata ? (now - rkt->rkt_ts_metadata) / 1000
-                                         : 0);
+                                         : 0,
+                    rkt->rkt_err == RD_KAFKA_RESP_ERR_NO_ERROR?
+                            "": rd_kafka_err2str(rkt->rkt_err));
 
                 rd_kafka_stats_emit_avg(st, "batchsize",
                                         &rkt->rkt_avg_batchsize);
