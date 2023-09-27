@@ -292,7 +292,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                                         retry_ms, &json);
 
         if (unlikely(herr != NULL)) {
-                rd_kafka_log(rk, LOG_ERR, "OIDC",
+                rd_kafka_log(rk, LOG_WARNING, "OIDC",
                              "Failed to retrieve OIDC "
                              "token from \"%s\": %s (%d)",
                              token_url, herr->errstr, herr->code);

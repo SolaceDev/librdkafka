@@ -2588,6 +2588,15 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_get(const rd_kafka_topic_conf_t *conf,
 
 
 /**
+ * @brief Returns whether property \p name is "sensitive"
+ *
+ * Returns whether property \p name is a "sensitive" property, such as a
+ * password, which must be scrubbed from debug logs, memory, etc.
+ */
+RD_EXPORT
+int rd_kafka_conf_is_sensitive(const rd_kafka_conf_t* conf, const char* name);
+
+/**
  * @brief Dump the configuration properties and values of \p conf to an array
  *        with \"key\", \"value\" pairs.
  *

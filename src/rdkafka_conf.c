@@ -1014,7 +1014,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "authorization server handles. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
-    {_RK_GLOBAL, "sasl.oauthbearer.client.secret", _RK_C_STR,
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.client.secret", _RK_C_STR,
      _RK(sasl.oauthbearer.client_secret),
      "Client secret only known to the application and the "
      "authorization server. This should be a sufficiently random string "
@@ -3150,6 +3150,26 @@ rd_kafka_conf_res_t rd_kafka_conf_get(const rd_kafka_conf_t *conf,
          * If the global property was unknown, try getting it from the
          * default topic config, if any. */
         return rd_kafka_topic_conf_get(conf->topic_conf, name, dest, dest_size);
+}
+
+
+int rd_kafka_conf_is_sensitive(const rd_kafka_conf_t* conf, const char* name) {
+        const struct rd_kafka_property *prop;
+        for (prop = rd_kafka_properties; prop->name; prop++) {
+                if ((prop->scope & _RK_GLOBAL) == 0 ||
+                    (strcmp(prop->name, name) != 0))
+                        continue;
+
+                if ((prop->scope & _RK_SENSITIVE) != 0)
+                        return 1;
+
+                if (prop->type == _RK_C_ALIAS)
+                        return rd_kafka_conf_is_sensitive(conf, prop->sdef);
+
+                return 0;
+        }
+
+        return 0;
 }
 
 
