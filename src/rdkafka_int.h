@@ -558,6 +558,8 @@ struct rd_kafka_s {
         rd_kafka_timers_t rk_timers;
         thrd_t rk_thread;
 
+        rd_kafka_timer_t    stats_tmr;
+
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
                              *   instance has been fully initialized. */
 

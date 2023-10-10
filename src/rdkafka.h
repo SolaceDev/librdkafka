@@ -3238,6 +3238,20 @@ RD_EXPORT
 void rd_kafka_yield(rd_kafka_t *rk);
 
 
+/**
+ * @brief Change the statistics interval.
+ *
+ * @param rk                Client instance.
+ * @param stats_interval_ms New statistics interval, in ms
+ *
+ * Changes the statistics interval to the specified value. This does not
+ * affect the statistics timer which is currently running, nor will it start
+ * the statistics timer if it is not running. The new value will take effect
+ * when the current statistics timer expires and is rescheduled.              
+ */
+RD_EXPORT
+void rd_kafka_change_stats_interval(rd_kafka_t *rk, int stats_interval_ms);
+
 
 /**
  * @brief Pause producing or consumption for the provided list of partitions.

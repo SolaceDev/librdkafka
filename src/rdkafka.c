@@ -2154,7 +2154,6 @@ static int rd_kafka_init_wait(rd_kafka_t *rk, int timeout_ms) {
 static int rd_kafka_thread_main(void *arg) {
         rd_kafka_t *rk                        = arg;
         rd_kafka_timer_t tmr_1s               = RD_ZERO_INIT;
-        rd_kafka_timer_t tmr_stats_emit       = RD_ZERO_INIT;
         rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
         rd_kafka_set_thread_name("main");
@@ -2173,7 +2172,7 @@ static int rd_kafka_thread_main(void *arg) {
         rd_kafka_timer_start(&rk->rk_timers, &tmr_1s, 1000000,
                              rd_kafka_1s_tmr_cb, NULL);
         if (rk->rk_conf.stats_interval_ms)
-                rd_kafka_timer_start(&rk->rk_timers, &tmr_stats_emit,
+                rd_kafka_timer_start(&rk->rk_timers, &rk->stats_tmr,
                                      rk->rk_conf.stats_interval_ms * 1000ll,
                                      rd_kafka_stats_emit_tmr_cb, NULL);
         if (rk->rk_conf.metadata_refresh_interval_ms > 0)
@@ -2216,7 +2215,7 @@ static int rd_kafka_thread_main(void *arg) {
 
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_1s, 1);
         if (rk->rk_conf.stats_interval_ms)
-                rd_kafka_timer_stop(&rk->rk_timers, &tmr_stats_emit, 1);
+                rd_kafka_timer_stop(&rk->rk_timers, &rk->stats_tmr, 1);
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_metadata_refresh, 1);
 
         /* Synchronise state */
@@ -4638,6 +4637,11 @@ const char *rd_kafka_purge_flags2str(int flags) {
         static RD_TLS char ret[64];
 
         return rd_flags2str(ret, sizeof(ret), names, flags);
+}
+
+
+void rd_kafka_change_stats_interval(rd_kafka_t *rk, int stats_interval_ms) {
+        rk->stats_tmr.rtmr_interval = stats_interval_ms * 1000ll;
 }
 
 
