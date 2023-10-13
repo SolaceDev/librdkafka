@@ -1236,6 +1236,16 @@ rd_kafka_resp_err_t rd_kafka_topic_err(const rd_kafka_topic_t* rkt) {
     return rkt->rkt_err;
 }
 
+
+/**
+ * @brief Returns \p rd_kafka_t object for topic handle \p rkt.
+ *
+ * @locality any
+ */
+rd_kafka_t* rd_kafka_topic_rd_kafka(const rd_kafka_topic_t* rkt) {
+    return rkt? rkt->rkt_rk: NULL;
+}
+
 /**
  * @brief Mark topic as errored, such as when topic authorization fails.
  *

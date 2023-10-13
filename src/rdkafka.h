@@ -3185,6 +3185,15 @@ RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_topic_err(const rd_kafka_topic_t* rkt);
 
 /**
+ * @brief Returns \p rd_kafka_t object for topic handle \p rkt.
+ *
+ * There is no lock or reference count on the returned \p rd_kafka_t object,
+ * nor should \p rd_kafka_destroy() be called for it.
+ */
+RD_EXPORT
+rd_kafka_t* rd_kafka_topic_rd_kafka(const rd_kafka_topic_t* rkt);
+
+/**
  * @brief Unassigned partition.
  *
  * The unassigned partition is used by the producer API for messages
