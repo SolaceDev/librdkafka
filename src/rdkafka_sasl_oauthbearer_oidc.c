@@ -310,7 +310,7 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                     "\"access_token\" field");
                 goto done;
         }
-
+        
         jwt_token = cJSON_GetStringValue(parsed_token);
         if (jwt_token == NULL) {
                 rd_kafka_oauthbearer_set_token_failure(
@@ -319,6 +319,9 @@ void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
                     "response as a value string");
                 goto done;
         }
+
+        rd_kafka_log(rk, LOG_WARNING, "OIDC",
+                     "Received JWT token \"%s\"", jwt_token);
 
         errstr = rd_kafka_jwt_b64_decode_payload(jwt_token, &decoded_payloads);
         if (errstr != NULL) {

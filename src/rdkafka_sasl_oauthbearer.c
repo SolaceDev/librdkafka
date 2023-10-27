@@ -480,6 +480,9 @@ rd_kafka_oauthbearer_set_token_failure0(rd_kafka_t *rk, const char *errstr) {
         if (!errstr || !*errstr)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+        rd_kafka_log(rk, LOG_WARNING, "OAUTH",
+                     "Set token failure: \"%s\"", errstr);
+
         rwlock_wrlock(&handle->lock);
         error_changed = !handle->errstr || strcmp(handle->errstr, errstr);
         RD_IF_FREE(handle->errstr, rd_free);
@@ -1261,6 +1264,13 @@ static int rd_kafka_sasl_oauthbearer_client_new(rd_kafka_transport_t *rktrans,
                         rd_strtup_list_copy, NULL);
 
         rwlock_rdunlock(&handle->lock);
+        
+        rd_kafka_log(rktrans->rktrans_rkb->rkb_rk, LOG_WARNING, "OAUTH",
+                     "rd_kafka_sasl_oauthbearer_client_new: token=\"%s\" "
+                     "principal=\"%s\"",
+                     state->token_value,
+                     state->md_principal_name?
+                         state->md_principal_name: "(null)");
 
         /* Kick off the FSM */
         return rd_kafka_sasl_oauthbearer_fsm(rktrans, NULL, errstr,
