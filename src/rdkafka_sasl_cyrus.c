@@ -70,7 +70,28 @@ typedef struct rd_kafka_sasl_cyrus_state_s {
         sasl_callback_t callbacks[16];
 } rd_kafka_sasl_cyrus_state_t;
 
+static void rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk) {
+        mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
+        if (rk->rk_conf.sasl.config) {
+            setenv("KRB5_CONFIG", rk->rk_conf.sasl.config, 1);
+        } else {
+            unsetenv("KRB5_CONFIG");
+        }
+        if (rk->rk_conf.sasl.ccname) {
+            setenv("KRB5CCNAME", rk->rk_conf.sasl.ccname, 1);
+        } else {
+            unsetenv("KRB5CCNAME");
+        }
+        if (rk->rk_conf.sasl.keytab) {
+            setenv("KRB5_CLIENT_KTNAME", rk->rk_conf.sasl.keytab, 1);
+        } else {
+            unsetenv("KRB5_CLIENT_KTNAME");
+        }
+}
 
+static void rd_kafka_sasl_cyrus_unlock(rd_kafka_t *rk) {
+        mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
+}
 
 /**
  * Handle received frame from broker.
@@ -92,10 +113,10 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 const char *out;
                 unsigned int outlen;
 
-                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
                 r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
                                      &interact, &out, &outlen);
-                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 if (r >= 0) {
                         /* Note: outlen may be 0 here for an empty response */
@@ -151,11 +172,10 @@ auth_successful:
             RD_KAFKA_DBG_SECURITY) {
                 const char *user, *mech, *authsrc;
 
-                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
                 if (sasl_getprop(state->conn, SASL_USERNAME,
                                  (const void **)&user) != SASL_OK)
                         user = "(unknown)";
-                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (sasl_getprop(state->conn, SASL_MECHNAME,
                                  (const void **)&mech) != SASL_OK)
@@ -164,6 +184,7 @@ auth_successful:
                 if (sasl_getprop(state->conn, SASL_AUTHSOURCE,
                                  (const void **)&authsrc) != SASL_OK)
                         authsrc = "(unknown)";
+                rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
                            "Authenticated as %s using %s (%s)", user, mech,
@@ -227,9 +248,9 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
 
         /* Prevent multiple simultaneous refreshes by the same process to
          * avoid Kerberos credential cache corruption. */
-        mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
+        rd_kafka_sasl_cyrus_lock_set_env(rk);
         r = system(cmd);
-        mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
+        rd_kafka_sasl_cyrus_unlock(rk);
 
         duration = (int)((rd_clock() - ts_start) / 1000);
         if (duration > 5000)
@@ -485,9 +506,9 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
                 return;
 
         if (state->conn) {
-                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
                 sasl_dispose(&state->conn);
-                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
         }
         rd_free(state);
         rktrans->rktrans_sasl.state = NULL;
@@ -544,11 +565,11 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
 
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
-        mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+        rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
-        mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+        rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
                             sasl_errstring(r, NULL, NULL));
@@ -568,10 +589,10 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 unsigned int outlen;
                 const char *mech = NULL;
 
-                mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
                 r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
                                       NULL, &out, &outlen, &mech);
-                mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
+                rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 if (r >= 0)
                         if (rd_kafka_sasl_send(rktrans, out, outlen, errstr,

@@ -282,6 +282,8 @@ struct rd_kafka_conf_s {
                 char *service_name;
                 char *kinit_cmd;
                 char *keytab;
+                char *config;
+                char *ccname;
                 int relogin_min_time;
                 /** Protects .username and .password access after client
                  *  instance has been created (see sasl_set_credentials()). */

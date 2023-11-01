@@ -936,9 +936,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _UNSUPPORTED_WIN32_GSSAPI},
     {_RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR, _RK(sasl.keytab),
      "Path to Kerberos keytab file. "
-     "This configuration property is only used as a variable in "
+     "This configuration property is used as a variable in "
      "`sasl.kerberos.kinit.cmd` as "
-     "` ... -t \"%{sasl.kerberos.keytab}\"`.",
+     "` ... -t \"%{sasl.kerberos.keytab}\"` "
+     "and in the KRB5_CLIENT_KTNAME environment variable.",
+     _UNSUPPORTED_WIN32_GSSAPI},
+    {_RK_GLOBAL, "sasl.kerberos.config", _RK_C_STR, _RK(sasl.config),
+     "Kerberos KRB5_CONFIG environment variable.",
+     _UNSUPPORTED_WIN32_GSSAPI},
+    {_RK_GLOBAL, "sasl.kerberos.ccname", _RK_C_STR, _RK(sasl.ccname),
+     "Kerberos KRB5CCNAME environment variable.",
      _UNSUPPORTED_WIN32_GSSAPI},
     {_RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
      _RK(sasl.relogin_min_time),

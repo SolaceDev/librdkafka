@@ -327,8 +327,8 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
 #       ifdef CURLOPTTYPE_BLOB
         if (rk->rk_conf.ssl.cert_pem) {
                 struct curl_blob blob;
-                blob.data = rk->rk_conf.ssl.key_pem;
-                blob.len = strlen(rk->rk_conf.ssl.key_pem);
+                blob.data = rk->rk_conf.ssl.cert_pem;
+                blob.len = strlen(rk->rk_conf.ssl.cert_pem);
                 blob.flags = CURL_BLOB_COPY;
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLCERT_BLOB, &blob);
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLCERTTYPE, "PEM");
@@ -341,8 +341,8 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
 #       ifdef CURLOPTTYPE_BLOB
         if (rk->rk_conf.ssl.key_pem) {
                 struct curl_blob blob;
-                blob.data = rk->rk_conf.ssl.cert_pem;
-                blob.len = strlen(rk->rk_conf.ssl.cert_pem);
+                blob.data = rk->rk_conf.ssl.key_pem;
+                blob.len = strlen(rk->rk_conf.ssl.key_pem);
                 blob.flags = CURL_BLOB_COPY;
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLKEY_BLOB, &blob);
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_SSLKEYTYPE, "PEM");
