@@ -204,6 +204,7 @@ struct rd_kafka_conf_s {
         int metadata_max_age_ms;
         int metadata_propagation_max_ms;
         int debug;
+        int debug_sensitive;
         int broker_addr_ttl;
         int broker_addr_family;
         int socket_timeout_ms;
