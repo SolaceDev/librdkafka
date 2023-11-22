@@ -442,7 +442,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   char *errstr,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
+        size_t namelen;
         char *t;
+        char *ipAddrAsc = NULL;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
         rd_snprintf(name, sizeof(name), "%s",
@@ -453,12 +455,17 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
+        namelen = strlen(name);
+        if (/*ipv6*/ (strchr(name, ':') &&
+                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
+                            namelen) ||
+            /*ipv4*/ strspn(name, "0123456789.") == namelen) {
+                ipAddrAsc = name;
+        }
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name, ':') &&
-                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name)) ||
-              /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) &&
+        if (!ipAddrAsc &&
             !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
                 goto fail;
 #endif
@@ -467,7 +474,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000 && \
+    OPENSSL_VERSION_NUMBER < 0x1000200fL && \
+    !defined(OPENSSL_IS_BORINGSSL)
         if (!SSL_set1_host(rktrans->rktrans_ssl, name))
                 goto fail;
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
@@ -476,7 +485,11 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(param, name, 0))
+                if (!X509_VERIFY_PARAM_set1_host(param, name, namelen))
+                        goto fail;
+
+                if (ipAddrAsc && 
+                    !X509_VERIFY_PARAM_set1_ip_asc(param, ipAddrAsc))
                         goto fail;
         }
 #else

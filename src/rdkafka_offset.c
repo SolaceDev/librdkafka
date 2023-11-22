@@ -802,6 +802,9 @@ void rd_kafka_offset_reset(rd_kafka_toppar_t *rktp,
         char reason[512];
         va_list ap;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
         va_start(ap, fmt);
         rd_vsnprintf(reason, sizeof(reason), fmt, ap);
         va_end(ap);
