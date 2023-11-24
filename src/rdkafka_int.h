@@ -234,8 +234,6 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
-
-
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
@@ -559,6 +557,12 @@ struct rd_kafka_s {
         thrd_t rk_thread;
 
         rd_kafka_timer_t    stats_tmr;
+
+        /**
+         * Stats "graveyard", for brokers and toppars that formerly existed
+         * but have been destroyed.
+         */
+        rd_kafka_stats_total_t  graveyard_stats;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
                              *   instance has been fully initialized. */

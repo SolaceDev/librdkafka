@@ -303,10 +303,32 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
 static void rd_kafka_toppar_remove(rd_kafka_toppar_t *rktp) {
+        rd_kafka_op_t *rko;
+
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARREMOVE",
                      "Removing toppar %s [%" PRId32 "] %p",
                      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                      rktp);
+        
+        rko = rd_kafka_op_new(RD_KAFKA_OP_UPDATEGRAVEYARDSTATS);
+        rko->rko_u.graveyard.stats.tx           = 0;
+        rko->rko_u.graveyard.stats.tx_bytes     = 0;
+        rko->rko_u.graveyard.stats.rx           = 0;
+        rko->rko_u.graveyard.stats.rx_bytes     = 0;
+        rko->rko_u.graveyard.stats.txmsgs = 
+                rd_atomic64_get(&rktp->rktp_c.tx_msgs);
+        rko->rko_u.graveyard.stats.txmsg_bytes = 
+                rd_atomic64_get(&rktp->rktp_c.tx_msg_bytes);
+        rko->rko_u.graveyard.stats.rxmsgs = 
+                rd_atomic64_get(&rktp->rktp_c.rx_msgs);
+        rko->rko_u.graveyard.stats.rxmsg_bytes = 
+                rd_atomic64_get(&rktp->rktp_c.rx_msg_bytes);
+        rd_kafka_q_enq(rktp->rktp_rkt->rkt_rk->rk_ops, rko);
+
+        rd_atomic64_set(&rktp->rktp_c.tx_msgs, 0);
+        rd_atomic64_set(&rktp->rktp_c.tx_msg_bytes, 0);
+        rd_atomic64_set(&rktp->rktp_c.rx_msgs, 0);
+        rd_atomic64_set(&rktp->rktp_c.rx_msg_bytes, 0);
 
         rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
                             &rktp->rktp_validate_tmr, 1 /*lock*/);

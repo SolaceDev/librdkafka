@@ -1396,18 +1396,6 @@ struct _stats_emit {
                 st->of += _r;                                                    \
         } while (0)
 
-struct _stats_total {
-        int64_t tx;          /**< broker.tx */
-        int64_t tx_bytes;    /**< broker.tx_bytes */
-        int64_t rx;          /**< broker.rx */
-        int64_t rx_bytes;    /**< broker.rx_bytes */
-        int64_t txmsgs;      /**< partition.txmsgs */
-        int64_t txmsg_bytes; /**< partition.txbytes */
-        int64_t rxmsgs;      /**< partition.rxmsgs */
-        int64_t rxmsg_bytes; /**< partition.rxbytes */
-};
-
-
 
 /**
  * @brief Rollover and emit an average window.
@@ -1460,7 +1448,7 @@ static RD_INLINE void rd_kafka_stats_emit_avg(struct _stats_emit *st,
  * Emit stats for toppar
  */
 static RD_INLINE void rd_kafka_stats_emit_toppar(struct _stats_emit *st,
-                                                 struct _stats_total *total,
+                                                 rd_kafka_stats_total_t *total,
                                                  rd_kafka_toppar_t *rktp,
                                                  int first) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
@@ -1735,7 +1723,7 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         struct _stats_emit stx    = {.size = 1024 * 10};
         struct _stats_emit *st    = &stx;
-        struct _stats_total total = {0};
+        rd_kafka_stats_total_t total = rk->graveyard_stats;
 
         st->buf = rd_malloc(st->size);
 
@@ -2054,6 +2042,20 @@ static void rd_kafka_stats_emit_all(rd_kafka_t *rk) {
         rko->rko_u.stats.json     = st->buf;
         rko->rko_u.stats.json_len = st->of;
         rd_kafka_q_enq(rk->rk_rep, rko);
+}
+
+static void rd_kafka_update_graveyard_stats(rd_kafka_t *rk, 
+                                            rd_kafka_stats_total_t *dead) {
+        rd_kafka_wrlock(rk);
+        rk->graveyard_stats.tx          += dead->tx;
+        rk->graveyard_stats.tx_bytes    += dead->tx_bytes;
+        rk->graveyard_stats.rx          += dead->rx;
+        rk->graveyard_stats.rx_bytes    += dead->rx_bytes;
+        rk->graveyard_stats.txmsgs      += dead->txmsgs;
+        rk->graveyard_stats.txmsg_bytes += dead->txmsg_bytes;
+        rk->graveyard_stats.rxmsgs      += dead->rxmsgs;
+        rk->graveyard_stats.rxmsg_bytes += dead->rxmsg_bytes;
+        rd_kafka_wrunlock(rk);
 }
 
 
@@ -4114,6 +4116,11 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
                 rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
 
+                break;
+        
+        case RD_KAFKA_OP_UPDATEGRAVEYARDSTATS:
+                rd_kafka_update_graveyard_stats(rk,
+                                                &rko->rko_u.graveyard.stats);
                 break;
 
         default:

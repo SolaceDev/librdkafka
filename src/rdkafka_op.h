@@ -173,6 +173,7 @@ typedef enum {
                                                      AlterUserScramCredentials
                                                      u.admin_request >*/
         RD_KAFKA_OP_NOTIFYRETRY,               /**< Notify of produce retry */
+        RD_KAFKA_OP_UPDATEGRAVEYARDSTATS,      /**< Update graveyard stats */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -264,6 +265,17 @@ struct rd_kafka_admin_fanout_worker_cbs;
 
 #define RD_KAFKA_OP_TYPE_ASSERT(rko, type)                                     \
         rd_assert(((rko)->rko_type & ~RD_KAFKA_OP_FLAGMASK) == (type))
+
+typedef struct rd_kafka_stats_total_s {
+        int64_t tx;          /**< broker.tx */
+        int64_t tx_bytes;    /**< broker.tx_bytes */
+        int64_t rx;          /**< broker.rx */
+        int64_t rx_bytes;    /**< broker.rx_bytes */
+        int64_t txmsgs;      /**< partition.txmsgs */
+        int64_t txmsg_bytes; /**< partition.txbytes */
+        int64_t rxmsgs;      /**< partition.rxmsgs */
+        int64_t rxmsg_bytes; /**< partition.rxbytes */
+} rd_kafka_stats_total_t;
 
 struct rd_kafka_op_s {
         TAILQ_ENTRY(rd_kafka_op_s) rko_link;
@@ -657,6 +669,12 @@ struct rd_kafka_op_s {
                         void *opaque;
 
                 } leaders;
+                
+                struct {
+                        /** Stats from brokers or toppars being destroyed,
+                         *  to be recorded in the graveyard. */
+                        rd_kafka_stats_total_t stats;
+                } graveyard;
 
         } rko_u;
 };

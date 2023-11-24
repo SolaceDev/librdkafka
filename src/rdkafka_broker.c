@@ -4676,6 +4676,29 @@ static int rd_kafka_broker_thread_main(void *arg) {
  * Final destructor. Refcnt must be 0.
  */
 void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_op_t *rko;
+
+        if (rk) {
+                rko = rd_kafka_op_new(RD_KAFKA_OP_UPDATEGRAVEYARDSTATS);
+                rko->rko_u.graveyard.stats.tx =
+                    rd_atomic64_get(&rkb->rkb_c.tx);
+                rko->rko_u.graveyard.stats.tx_bytes =
+                    rd_atomic64_get(&rkb->rkb_c.tx_bytes);
+                rko->rko_u.graveyard.stats.rx =
+                    rd_atomic64_get(&rkb->rkb_c.rx);
+                rko->rko_u.graveyard.stats.rx_bytes =
+                    rd_atomic64_get(&rkb->rkb_c.rx_bytes);
+                rko->rko_u.graveyard.stats.txmsgs       = 0;
+                rko->rko_u.graveyard.stats.txmsg_bytes  = 0;
+                rko->rko_u.graveyard.stats.rxmsgs       = 0;
+                rko->rko_u.graveyard.stats.rxmsg_bytes  = 0;
+                rd_kafka_q_enq(rk->rk_ops, rko);
+                rd_atomic64_set(&rkb->rkb_c.tx, 0);
+                rd_atomic64_set(&rkb->rkb_c.tx_bytes, 0);
+                rd_atomic64_set(&rkb->rkb_c.rx, 0);
+                rd_atomic64_set(&rkb->rkb_c.rx_bytes, 0);
+        }
 
         rd_assert(thrd_is_current(rkb->rkb_thread));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_monitors));
