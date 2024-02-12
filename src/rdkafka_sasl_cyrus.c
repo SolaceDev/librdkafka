@@ -52,6 +52,7 @@
  *        kinit cache corruption.
  */
 static mtx_t rd_kafka_sasl_cyrus_kinit_lock;
+static rd_atomic32_t lock_collision_count;
 
 /**
  * @struct Per-client-instance handle
@@ -70,7 +71,23 @@ typedef struct rd_kafka_sasl_cyrus_state_s {
         sasl_callback_t callbacks[16];
 } rd_kafka_sasl_cyrus_state_t;
 
-static void rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk) {
+
+
+/**
+ * @brief Takes system-wide mutex and sets environment variables pertaining
+ *        to Cyrus SASL calls. If block_on_collision is 0, will do nothing
+ *        if another thread is contending for this lock.
+ * 
+ * @returns 1 iff lock is taken and rd_kafka_sasl_cyrus_unlock must be called 
+ */
+static int rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk,
+                                            int block_on_collision) {
+        int prev_collision_count = rd_atomic32_add(&lock_collision_count, 1);
+        if ((prev_collision_count > 1) && !block_on_collision) {
+                rd_atomic32_add(&lock_collision_count, -1);
+                return 0;
+        }
+        
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
         if (rk->rk_conf.sasl.config) {
             setenv("KRB5_CONFIG", rk->rk_conf.sasl.config, 1);
@@ -87,10 +104,12 @@ static void rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk) {
         } else {
             unsetenv("KRB5_CLIENT_KTNAME");
         }
+        return 1;
 }
 
 static void rd_kafka_sasl_cyrus_unlock(rd_kafka_t *rk) {
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
+        rd_atomic32_add(&lock_collision_count, -1);
 }
 
 /**
@@ -113,7 +132,7 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 const char *out;
                 unsigned int outlen;
 
-                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
                 r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
                                      &interact, &out, &outlen);
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
@@ -172,7 +191,7 @@ auth_successful:
             RD_KAFKA_DBG_SECURITY) {
                 const char *user, *mech, *authsrc;
 
-                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
                 if (sasl_getprop(state->conn, SASL_USERNAME,
                                  (const void **)&user) != SASL_OK)
                         user = "(unknown)";
@@ -223,11 +242,11 @@ render_callback(const char *key, char *buf, size_t size, void *opaque) {
  */
 static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
         rd_kafka_sasl_cyrus_handle_t *handle = rk->rk_sasl.handle;
-        int r;
+        int r = -1;
         char *cmd;
         char errstr[128];
         rd_ts_t ts_start;
-        int duration;
+        int duration = 0;
 
         /* Build kinit refresh command line using string rendering and config */
         cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd, errstr,
@@ -248,60 +267,62 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
 
         /* Prevent multiple simultaneous refreshes by the same process to
          * avoid Kerberos credential cache corruption. */
-        rd_kafka_sasl_cyrus_lock_set_env(rk);
-        r = system(cmd);
-        rd_kafka_sasl_cyrus_unlock(rk);
+        if (rd_kafka_sasl_cyrus_lock_set_env(rk, 0)) {
+                r = system(cmd);
+                rd_kafka_sasl_cyrus_unlock(rk);
 
-        duration = (int)((rd_clock() - ts_start) / 1000);
-        if (duration > 5000)
-                rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
-                             "Slow Kerberos ticket refresh: %dms: %s", duration,
-                             cmd);
-
-        /* Regardless of outcome from the kinit command (it can fail
-         * even if the ticket is available), we now allow broker connections. */
-        if (rd_atomic32_add(&handle->ready, 1) == 1) {
-                rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
-                             "First kinit command finished: waking up "
-                             "broker threads");
-                rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
-                                            "Kerberos ticket refresh");
-        }
-
-        if (r == -1) {
-                if (errno == ECHILD) {
+                duration = (int)((rd_clock() - ts_start) / 1000);
+                if (duration > 5000)
                         rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
-                                     "Kerberos ticket refresh command "
-                                     "returned ECHILD: %s: exit status "
-                                     "unknown, assuming success",
-                                     cmd);
-                } else {
+                                     "Slow Kerberos ticket refresh: %dms: %s",
+                                     duration, cmd);
+
+                /* Regardless of outcome from the kinit command (it can fail
+                 * even if the ticket is available), we now allow broker
+                 * connections.                                             */
+                if (rd_atomic32_add(&handle->ready, 1) == 1) {
+                        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
+                                     "First kinit command finished: waking up "
+                                     "broker threads");
+                        rd_kafka_all_brokers_wakeup(rk, RD_KAFKA_BROKER_STATE_INIT,
+                                                    "Kerberos ticket refresh");
+                }
+
+                if (r == -1) {
+                        if (errno == ECHILD) {
+                                rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
+                                             "Kerberos ticket refresh command "
+                                             "returned ECHILD: %s: exit status "
+                                             "unknown, assuming success",
+                                             cmd);
+                        } else {
+                                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                                             "Kerberos ticket refresh failed: "
+                                             "%s: %s", cmd, rd_strerror(errno));
+                                rd_free(cmd);
+                                return -1;
+                        }
+                } else if (WIFSIGNALED(r)) {
                         rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                                     "Kerberos ticket refresh failed: %s: %s",
-                                     cmd, rd_strerror(errno));
+                                     "Kerberos ticket refresh failed: %s: "
+                                     "received signal %d",
+                                     cmd, WTERMSIG(r));
+                        rd_free(cmd);
+                        return -1;
+                } else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
+                        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                                     "Kerberos ticket refresh failed: %s: "
+                                     "exited with code %d",
+                                     cmd, WEXITSTATUS(r));
                         rd_free(cmd);
                         return -1;
                 }
-        } else if (WIFSIGNALED(r)) {
-                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "Kerberos ticket refresh failed: %s: "
-                             "received signal %d",
-                             cmd, WTERMSIG(r));
-                rd_free(cmd);
-                return -1;
-        } else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
-                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-                             "Kerberos ticket refresh failed: %s: "
-                             "exited with code %d",
-                             cmd, WEXITSTATUS(r));
-                rd_free(cmd);
-                return -1;
         }
 
         rd_free(cmd);
 
-        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
-                     "Kerberos ticket refreshed in %dms", duration);
+        rd_kafka_dbg(rk, SECURITY, "SASLREFRESH", "Kerberos ticket %s in %dms",
+                     r >=0? "refreshed": "skipped", duration);
         return 0;
 }
 
@@ -313,9 +334,19 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
  */
 static void rd_kafka_sasl_cyrus_kinit_refresh_tmr_cb(rd_kafka_timers_t *rkts,
                                                      void *arg) {
+        rd_ts_t tmr_interval;
         rd_kafka_t *rk = arg;
+        rd_kafka_sasl_cyrus_handle_t *handle = rk->rk_sasl.handle;
 
         rd_kafka_sasl_cyrus_kinit_refresh(rk);
+
+        /* Randomize the refresh timer interval to the configured value
+         * +/-25%, so we don't get large number of rdkafka_t threads self-
+         * synchronizing on blocking kinit calls.                           */
+        tmr_interval = rd_jitter(rk->rk_conf.sasl.relogin_min_time * 3 / 4,
+                                 rk->rk_conf.sasl.relogin_min_time * 5 / 4);
+        if (tmr_interval <= 0) tmr_interval = 1;
+        handle->kinit_refresh_tmr.rtmr_interval = tmr_interval * 1000ll;
 }
 
 
@@ -506,7 +537,7 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
                 return;
 
         if (state->conn) {
-                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
                 sasl_dispose(&state->conn);
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
         }
@@ -565,7 +596,7 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
 
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
-        rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
+        rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
@@ -589,7 +620,7 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 unsigned int outlen;
                 const char *mech = NULL;
 
-                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk);
+                rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
                 r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
                                       NULL, &out, &outlen, &mech);
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
