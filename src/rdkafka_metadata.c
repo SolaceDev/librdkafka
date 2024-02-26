@@ -82,7 +82,7 @@ rd_kafka_metadata(rd_kafka_t *rk,
 
         rkq = rd_kafka_q_new(rk);
 
-        rd_list_init(&topics, 0, rd_free);
+        rd_list_init(&topics, 0, rd_free_fn);
         if (!all_topics) {
                 if (only_rkt)
                         rd_list_add(&topics,
@@ -1213,7 +1213,7 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                 destroy_rkb = 1;
         }
 
-        rd_list_init(&q_topics, rd_list_cnt(topics), rd_free);
+        rd_list_init(&q_topics, rd_list_cnt(topics), rd_free_fn);
 
         if (!force) {
 
@@ -1284,7 +1284,7 @@ rd_kafka_metadata_refresh_known_topics(rd_kafka_t *rk,
         if (!rk)
                 rk = rkb->rkb_rk;
 
-        rd_list_init(&topics, 8, rd_free);
+        rd_list_init(&topics, 8, rd_free_fn);
         rd_kafka_local_topics_to_list(rk, &topics, &cache_cnt);
 
         /* Allow topic auto creation if there are locally known topics (rkt)
@@ -1344,7 +1344,7 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                 return rd_kafka_metadata_refresh_all(rk, rkb, reason);
         }
 
-        rd_list_init(&topics, 8, rd_free);
+        rd_list_init(&topics, 8, rd_free_fn);
 
         /* Add locally known topics, i.e., those that are currently
          * being consumed or otherwise referenced through topic_t objects. */
@@ -1487,7 +1487,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb(rd_kafka_timers_t *rkts,
         rd_list_t topics;
 
         rd_kafka_wrlock(rk);
-        rd_list_init(&topics, rk->rk_topic_cnt, rd_free);
+        rd_list_init(&topics, rk->rk_topic_cnt, rd_free_fn);
 
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
                 int i, require_metadata;

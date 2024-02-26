@@ -1620,7 +1620,7 @@ void rd_kafka_topic_scan_all(rd_kafka_t *rk, rd_ts_t now) {
         rd_kafka_toppar_t *rktp;
         rd_list_t query_topics;
 
-        rd_list_init(&query_topics, 0, rd_free);
+        rd_list_init(&query_topics, 0, rd_free_fn);
 
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
@@ -1987,7 +1987,7 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
                                   rd_bool_t force) {
         rd_list_t topics;
 
-        rd_list_init(&topics, 1, rd_free);
+        rd_list_init(&topics, 1, rd_free_fn);
         rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
 
         rd_kafka_metadata_refresh_topics(

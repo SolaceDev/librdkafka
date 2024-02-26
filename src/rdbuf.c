@@ -129,7 +129,7 @@ static rd_segment_t *rd_buf_alloc_segment0(rd_buf_t *rbuf, size_t size) {
         } else if ((seg = extra_alloc(rbuf, sizeof(*seg)))) {
                 rd_segment_init(seg, size > 0 ? rd_malloc(size) : NULL, size);
                 if (size > 0)
-                        seg->seg_free = rd_free;
+                        seg->seg_free = rd_free_fn;
 
         } else if ((seg = rd_malloc(sizeof(*seg) + size))) {
                 rd_segment_init(seg, size > 0 ? seg + 1 : NULL, size);
@@ -1802,7 +1802,7 @@ static int do_unittest_erase(void) {
                 /* Write segments to buffer */
                 for (j = 0; in[i].segs[j]; j++)
                         rd_buf_push_writable(&b, rd_strdup(in[i].segs[j]),
-                                             strlen(in[i].segs[j]), rd_free);
+                                             strlen(in[i].segs[j]), rd_free_fn);
 
                 /* Perform erasures */
                 for (j = 0; in[i].erasures[j].retsize; j++) {

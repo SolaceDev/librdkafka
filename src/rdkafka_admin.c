@@ -5351,7 +5351,7 @@ void rd_kafka_DescribeUserScramCredentials(
 
         /* Check Duplicates */
         if (user_cnt > 1) {
-                userlist = rd_list_new(user_cnt, rd_free);
+                userlist = rd_list_new(user_cnt, rd_free_fn);
                 for (i = 0; i < user_cnt; i++) {
                         rd_list_add(userlist, rd_strdup(users[i]));
                 }
@@ -5366,7 +5366,7 @@ void rd_kafka_DescribeUserScramCredentials(
                 rd_list_destroy(userlist);
         }
 
-        rd_list_init(&rko->rko_u.admin_request.args, user_cnt, rd_free);
+        rd_list_init(&rko->rko_u.admin_request.args, user_cnt, rd_free_fn);
         for (i = 0; i < user_cnt; i++) {
                 rd_list_add(&rko->rko_u.admin_request.args,
                             rd_kafkap_str_new(users[i], -1));
@@ -6843,7 +6843,7 @@ rd_kafka_ListConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_arraycnt(reply, &cnt, RD_KAFKAP_GROUPS_MAX);
         rd_list_init(&valid, cnt, rd_kafka_ConsumerGroupListing_free);
-        rd_list_init(&errors, 8, rd_free);
+        rd_list_init(&errors, 8, rd_free_fn);
         if (error)
                 rd_list_add(&errors, error);
 
@@ -6939,7 +6939,7 @@ rd_kafka_ListConsumerGroups_response_merge(rd_kafka_op_t *rko_fanout,
                     &rko_fanout->rko_u.admin_request.fanout.results, 0);
         } else {
                 rd_list_init(&new_valid, 0, rd_kafka_ConsumerGroupListing_free);
-                rd_list_init(&new_errors, 0, rd_free);
+                rd_list_init(&new_errors, 0, rd_free_fn);
                 res = rd_kafka_ListConsumerGroupsResult_new(&new_valid,
                                                             &new_errors);
                 rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, 0,
@@ -7650,7 +7650,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
         /* Copy group list and store it on the request op.
          * Maintain original ordering. */
         rd_list_init(&rko_fanout->rko_u.admin_request.args, (int)groups_cnt,
-                     rd_free);
+                     rd_free_fn);
         for (i = 0; i < groups_cnt; i++)
                 rd_list_add(&rko_fanout->rko_u.admin_request.args,
                             rd_strdup(groups[i]));
@@ -7711,7 +7711,7 @@ void rd_kafka_DescribeConsumerGroups(rd_kafka_t *rk,
                 rd_kafka_AdminOptions_set_opaque(
                     &rko->rko_u.admin_request.options, grp);
 
-                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
+                rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free_fn);
                 rd_list_add(&rko->rko_u.admin_request.args,
                             rd_strdup(groups[i]));
 

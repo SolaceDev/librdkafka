@@ -79,6 +79,7 @@
 #include "rdhttp.h"
 #endif
 
+sol_log_cb_t sol_log_cb = 0;
 
 static once_flag rd_kafka_global_init_once  = ONCE_FLAG_INIT;
 static once_flag rd_kafka_global_srand_once = ONCE_FLAG_INIT;
@@ -144,7 +145,8 @@ void rd_kafka_set_thread_sysname(const char *fmt, ...) {
 }
 
 static void rd_kafka_global_init0(void) {
-        cJSON_Hooks json_hooks = {.malloc_fn = rd_malloc, .free_fn = rd_free};
+        cJSON_Hooks json_hooks = {.malloc_fn = rd_malloc_fn,
+                                  .free_fn = rd_free_fn};
 
         mtx_init(&rd_kafka_global_lock, mtx_plain);
 #if ENABLE_DEVEL

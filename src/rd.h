@@ -106,6 +106,16 @@
 #define RD_SENTINEL
 #endif
 
+typedef void (*sol_log_cb_t)
+(
+    int         kafkaLogLevel,
+    char* const fileStr,
+    int         lineNum,
+    char const* formatStr,
+    ...
+);
+
+extern sol_log_cb_t sol_log_cb;
 
 /** Assert if reached */
 #define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")
@@ -122,6 +132,7 @@
         } while (0)
 
 
+#undef RD_MALLOC_DEBUG
 
 /**
  * Allocator wrappers.
@@ -129,27 +140,95 @@
  * allocation fails all hope is lost and the application
  * will fail anyway, so no need to handle it handsomely.
  */
+#ifndef RD_MALLOC_DEBUG
 static RD_INLINE RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
         void *p = calloc(num, sz);
         rd_assert(p);
         return p;
 }
+#define rd_calloc_fn rd_calloc
+#else
+#define rd_calloc(_num, _sz)                                                 \
+    ({                                                                       \
+        void *_p = calloc(_num, _sz);                                        \
+        rd_assert(_p);                                                       \
+        if (sol_log_cb)                                                      \
+                sol_log_cb(LOG_DEBUG, __FILE__, __LINE__,                    \
+                    "%p: rd_calloc(%zu, %zu)", _p, _num, _sz);               \
+        _p;                                                                  \
+    })
+static RD_INLINE RD_UNUSED void *rd_calloc_fn(size_t num, size_t sz) {
+        void *p = rd_calloc(num, sz);
+        rd_assert(p);
+        return p;
+}
+#endif
 
+#ifndef RD_MALLOC_DEBUG
 static RD_INLINE RD_UNUSED void *rd_malloc(size_t sz) {
         void *p = malloc(sz);
         rd_assert(p);
         return p;
 }
+#define rd_malloc_fn rd_malloc
+#else
+#define rd_malloc(_sz)                                                       \
+    ({                                                                       \
+        void *_p = malloc(_sz);                                              \
+        rd_assert(_p);                                                       \
+        if (sol_log_cb)                                                      \
+                sol_log_cb(LOG_DEBUG, __FILE__, __LINE__,                    \
+                    "%p: rd_malloc(%zu)", _p, _sz);                          \
+        _p;                                                                  \
+    })
+static RD_INLINE RD_UNUSED void *rd_malloc_fn(size_t sz) {
+        void *p = malloc(sz);
+        rd_assert(p);
+        return p;
+}
+#endif
 
+#ifndef RD_MALLOC_DEBUG
 static RD_INLINE RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
         void *p = realloc(ptr, sz);
         rd_assert(p);
         return p;
 }
+#define rd_realloc_fn rd_realloc
+#else
+#define rd_realloc(_ptr, _sz)                                                \
+    ({                                                                       \
+        void *_p = realloc(_ptr, _sz);                                       \
+        rd_assert(_p);                                                       \
+        if (sol_log_cb)                                                      \
+                sol_log_cb(LOG_DEBUG, __FILE__, __LINE__,                    \
+                    "%p: rd_realloc(%p, %zu)", _p, _ptr, _sz);               \
+        _p;                                                                  \
+    })
+static RD_INLINE RD_UNUSED void *rd_realloc_fn(void *ptr, size_t sz) {
+        void *p = realloc(ptr, sz);
+        rd_assert(p);
+        return p;
+}
+#endif
 
+#ifndef RD_MALLOC_DEBUG
 static RD_INLINE RD_UNUSED void rd_free(void *ptr) {
         free(ptr);
 }
+#define rd_free_fn rd_free
+#else
+#define rd_free(_ptr)                                                        \
+    ({                                                                       \
+        if (sol_log_cb)                                                      \
+                sol_log_cb(LOG_DEBUG, __FILE__, __LINE__,                    \
+                    "%p: rd_free(%p)", _ptr, _ptr);                          \
+        free(_ptr);                                                          \
+    })
+static RD_INLINE RD_UNUSED void rd_free_fn(void *ptr) {
+        free(ptr);
+}
+#endif
 
 static RD_INLINE RD_UNUSED char *rd_strdup(const char *s) {
 #ifndef _WIN32

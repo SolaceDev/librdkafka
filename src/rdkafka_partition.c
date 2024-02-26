@@ -3597,7 +3597,7 @@ rd_kafka_topic_partition_list_query_leaders_async_worker(rd_kafka_op_t *rko) {
          * Repeat until success or timeout. */
 
         rd_list_init(&query_topics, 4 + rko->rko_u.leaders.partitions->cnt / 2,
-                     rd_free);
+                     rd_free_fn);
 
         leaders = rd_list_new(1 + rko->rko_u.leaders.partitions->cnt / 2,
                               rd_kafka_partition_leader_destroy_free);
@@ -3792,7 +3792,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
                 rd_list_t query_topics;
                 int query_intvl;
 
-                rd_list_init(&query_topics, rktparlist->cnt, rd_free);
+                rd_list_init(&query_topics, rktparlist->cnt, rd_free_fn);
 
                 rd_kafka_topic_partition_list_get_leaders(
                     rk, rktparlist, leaders, &query_topics,

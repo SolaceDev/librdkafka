@@ -32,6 +32,7 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
+#include "rdrand.h"
 #include "rdstring.h"
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -73,6 +74,40 @@ typedef struct rd_kafka_sasl_cyrus_state_s {
 
 
 
+__attribute__((weak, noipa))
+int mallocDebug_setThreadTracking(int isTracking) {return 0;}
+
+__attribute__((weak, noipa))
+int64_t mallocDebug_getGlobalAllocBytes(void) {return 0;}
+
+__attribute__((weak, noipa))
+int64_t mallocDebug_getThreadAllocBytes(void) {return 0;}
+
+__attribute__((weak, noipa))
+int64_t mallocDebug_getGlobalLeakedBytes(void) {return 0;}
+
+__attribute__((weak, noipa))
+int64_t mallocDebug_getThreadLeakedBytes(void) {return 0;}
+
+static void emit_malloc_info0(
+    char* const fileStr, int lineNum, char const* labelStr) {
+#if 0
+        if (!sol_log_cb) return;
+        sol_log_cb(LOG_WARNING, fileStr, lineNum,
+            "memory: %s: global alloc=%ld leaked=%ld",
+            labelStr, mallocDebug_getGlobalAllocBytes(),
+            mallocDebug_getGlobalLeakedBytes());
+#endif
+}
+
+#define emit_malloc_info(label) \
+    emit_malloc_info0(__FILE__, __LINE__, label)
+
+
+static char env_krb5_config[512]        = "KRB5_CONFIG=";
+static char env_krb5ccname[512]         = "KRB5CCNAME=";
+static char env_krb5_client_ktname[512] = "KRB5_CLIENT_KTNAME=";
+
 /**
  * @brief Takes system-wide mutex and sets environment variables pertaining
  *        to Cyrus SASL calls. If block_on_collision is 0, will do nothing
@@ -82,6 +117,8 @@ typedef struct rd_kafka_sasl_cyrus_state_s {
  */
 static int rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk,
                                             int block_on_collision) {
+        char* val_ptr;
+
         int prev_collision_count = rd_atomic32_add(&lock_collision_count, 1);
         if ((prev_collision_count > 1) && !block_on_collision) {
                 rd_atomic32_add(&lock_collision_count, -1);
@@ -89,25 +126,58 @@ static int rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk,
         }
         
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
-        if (rk->rk_conf.sasl.config) {
-            setenv("KRB5_CONFIG", rk->rk_conf.sasl.config, 1);
-        } else {
-            unsetenv("KRB5_CONFIG");
+        emit_malloc_info("setenv etc: start");
+
+        mallocDebug_setThreadTracking(1);
+
+        val_ptr = strchr(env_krb5_config, '=');
+        if (val_ptr)
+        {
+            val_ptr += 1; /* skip past '=' */
+            if (rk->rk_conf.sasl.config) {
+                    strncpy(val_ptr, rk->rk_conf.sasl.config, 
+                            sizeof(env_krb5_config) 
+                                - (val_ptr - env_krb5_config));
+                    env_krb5_config[sizeof(env_krb5_config) - 1] = '\0';
+            } else {
+                    *val_ptr = '\0';
+            }
         }
-        if (rk->rk_conf.sasl.ccname) {
-            setenv("KRB5CCNAME", rk->rk_conf.sasl.ccname, 1);
-        } else {
-            unsetenv("KRB5CCNAME");
+
+        val_ptr = strchr(env_krb5ccname, '=');
+        if (val_ptr)
+        {
+            val_ptr += 1; /* skip past '=' */
+            if (rk->rk_conf.sasl.ccname) {
+                    strncpy(val_ptr, rk->rk_conf.sasl.ccname, 
+                            sizeof(env_krb5ccname) 
+                                - (val_ptr - env_krb5ccname));
+                    env_krb5ccname[sizeof(env_krb5ccname) - 1] = '\0';
+            } else {
+                    *val_ptr = '\0';
+            }
         }
-        if (rk->rk_conf.sasl.keytab) {
-            setenv("KRB5_CLIENT_KTNAME", rk->rk_conf.sasl.keytab, 1);
-        } else {
-            unsetenv("KRB5_CLIENT_KTNAME");
+
+        val_ptr = strchr(env_krb5_client_ktname, '=');
+        if (val_ptr)
+        {
+            val_ptr += 1; /* skip past '=' */
+            if (rk->rk_conf.sasl.keytab) {
+                    strncpy(val_ptr, rk->rk_conf.sasl.keytab, 
+                            sizeof(env_krb5_client_ktname) 
+                                - (val_ptr - env_krb5_client_ktname));
+                    env_krb5_client_ktname[sizeof(env_krb5_client_ktname) - 1] = '\0';
+            } else {
+                    *val_ptr = '\0';
+            }
         }
+
+        emit_malloc_info("setenv etc: done");
         return 1;
 }
 
 static void rd_kafka_sasl_cyrus_unlock(rd_kafka_t *rk) {
+        mallocDebug_setThreadTracking(0);
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
         rd_atomic32_add(&lock_collision_count, -1);
 }
@@ -133,8 +203,17 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 unsigned int outlen;
 
                 rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
+                emit_malloc_info("sasl_client_step: start");
                 r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
                                      &interact, &out, &outlen);
+                #if 0
+                if (out && sol_log_cb) {
+                        sol_log_cb(LOG_WARNING, __FILE__, __LINE__,
+                            "sasl_client_step: r=%d out=%p outlen=%u",
+                            r, out, outlen);
+                }
+                #endif
+                emit_malloc_info("sasl_client_step: done");
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 if (r >= 0) {
@@ -192,6 +271,7 @@ auth_successful:
                 const char *user, *mech, *authsrc;
 
                 rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
+                emit_malloc_info("sasl_getprop: start");
                 if (sasl_getprop(state->conn, SASL_USERNAME,
                                  (const void **)&user) != SASL_OK)
                         user = "(unknown)";
@@ -203,6 +283,7 @@ auth_successful:
                 if (sasl_getprop(state->conn, SASL_AUTHSOURCE,
                                  (const void **)&authsrc) != SASL_OK)
                         authsrc = "(unknown)";
+                emit_malloc_info("sasl_getprop: done");
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
@@ -296,21 +377,21 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
                                              "unknown, assuming success",
                                              cmd);
                         } else {
-                                rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                                rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
                                              "Kerberos ticket refresh failed: "
                                              "%s: %s", cmd, rd_strerror(errno));
                                 rd_free(cmd);
                                 return -1;
                         }
                 } else if (WIFSIGNALED(r)) {
-                        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                        rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
                                      "Kerberos ticket refresh failed: %s: "
                                      "received signal %d",
                                      cmd, WTERMSIG(r));
                         rd_free(cmd);
                         return -1;
                 } else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
-                        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                        rd_kafka_log(rk, LOG_WARNING, "SASLREFRESH",
                                      "Kerberos ticket refresh failed: %s: "
                                      "exited with code %d",
                                      cmd, WEXITSTATUS(r));
@@ -393,7 +474,12 @@ rd_kafka_sasl_cyrus_cb_log(void *context, int level, const char *message) {
                     "cyrus-sasl-gssapi packages are installed";
 
         /* Treat the "client step" log messages as debug. */
-        if (level >= LOG_DEBUG || !strncmp(message, "GSSAPI client step ", 19))
+        if (level < LOG_DEBUG && !strncmp(message, "GSSAPI client step ", 19))
+                level = LOG_DEBUG;
+        if (level < LOG_WARNING && !strncmp(message, "GSSAPI Error", 12))
+                level = LOG_WARNING;
+        
+        if (level >= LOG_DEBUG)
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL", "%s",
                            message);
         else
@@ -538,7 +624,9 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
 
         if (state->conn) {
                 rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
+                emit_malloc_info("sasl_dispose: start");
                 sasl_dispose(&state->conn);
+                emit_malloc_info("sasl_dispose: done");
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
         }
         rd_free(state);
@@ -597,9 +685,12 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
         rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
+        
+        emit_malloc_info("sasl_client_new: start");
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
+        emit_malloc_info("sasl_client_new: done");
         rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
@@ -609,8 +700,10 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
 
         if (rk->rk_conf.debug & RD_KAFKA_DBG_SECURITY) {
                 const char *avail_mechs;
+                emit_malloc_info("sasl_listmech: start");
                 sasl_listmech(state->conn, NULL, NULL, " ", NULL, &avail_mechs,
                               NULL, NULL);
+                emit_malloc_info("sasl_listmech: done");
                 rd_rkb_dbg(rkb, SECURITY, "SASL",
                            "My supported SASL mechanisms: %s", avail_mechs);
         }
@@ -621,8 +714,10 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 const char *mech = NULL;
 
                 rd_kafka_sasl_cyrus_lock_set_env(rktrans->rktrans_rkb->rkb_rk, 1);
+                emit_malloc_info("sasl_client_start: start");
                 r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
                                       NULL, &out, &outlen, &mech);
+                emit_malloc_info("sasl_client_start: done");
                 rd_kafka_sasl_cyrus_unlock(rktrans->rktrans_rkb->rkb_rk);
 
                 if (r >= 0)
@@ -740,7 +835,13 @@ void rd_kafka_sasl_cyrus_global_term(void) {
         /* NOTE: Should not be called since the application may be using SASL
          * too*/
         /* sasl_done(); */
-        mtx_destroy(&rd_kafka_sasl_cyrus_kinit_lock);
+        /* mtx_destroy(&rd_kafka_sasl_cyrus_kinit_lock); */
+
+        emit_malloc_info("sasl_client_done: start");
+        mallocDebug_setThreadTracking(1);
+        sasl_client_done();
+        mallocDebug_setThreadTracking(0);
+        emit_malloc_info("sasl_client_done: done");
 }
 
 
@@ -748,11 +849,27 @@ void rd_kafka_sasl_cyrus_global_term(void) {
  * Global SASL init, called once per runtime.
  */
 int rd_kafka_sasl_cyrus_global_init(void) {
+        static rd_atomic32_t has_been_called;
         int r;
+            
+        if (!rd_atomic32_exchange(&has_been_called, 1))
+        {
+            mtx_init(&rd_kafka_sasl_cyrus_kinit_lock, mtx_plain);
 
-        mtx_init(&rd_kafka_sasl_cyrus_kinit_lock, mtx_plain);
+            /* Use putenv() at initialization time, rather than repeatedly
+             * using setenv() on each pass through
+             * rd_kafka_sasl_cyrus_lock_set_env(), because setenv() seems to
+             * have memory leak issues.                                     */
+            putenv(env_krb5_config);
+            putenv(env_krb5ccname);
+            putenv(env_krb5_client_ktname);
+        }
 
+        emit_malloc_info("sasl_client_init: start");
+        mallocDebug_setThreadTracking(1);
         r = sasl_client_init(NULL);
+        mallocDebug_setThreadTracking(0);
+        emit_malloc_info("sasl_client_init: done");
         if (r != SASL_OK) {
                 fprintf(stderr, "librdkafka: sasl_client_init() failed: %s\n",
                         sasl_errstring(r, NULL, NULL));

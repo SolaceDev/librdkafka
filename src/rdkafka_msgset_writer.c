@@ -1201,7 +1201,7 @@ static int rd_kafka_msgset_writer_compress(rd_kafka_msgset_writer_t *msetw,
                  * for compressed messages, just the messages back-to-back,
                  * so we can push the compressed memory directly to the
                  * buffer without wrapping it. */
-                rd_buf_push(rbuf, ciov.iov_base, ciov.iov_len, rd_free);
+                rd_buf_push(rbuf, ciov.iov_base, ciov.iov_len, rd_free_fn);
                 outlen = ciov.iov_len;
 
         } else {
@@ -1213,7 +1213,7 @@ static int rd_kafka_msgset_writer_compress(rd_kafka_msgset_writer_t *msetw,
                                           msetw->msetw_firstmsg.timestamp};
                 outlen             = rd_kafka_msgset_writer_write_msg(
                     msetw, &rkm, 0, msetw->msetw_compression,
-                    rd_free /*free for ciov.iov_base*/);
+                    rd_free_fn /*free for ciov.iov_base*/);
         }
 
         *outlenp = outlen;

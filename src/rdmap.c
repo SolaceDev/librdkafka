@@ -394,8 +394,8 @@ static int unittest_untyped_map(void) {
         rd_ts_t ts     = rd_clock();
         rd_ts_t ts_get = 0;
 
-        rd_map_init(&rmap, cnt, rd_map_str_cmp, rd_map_str_hash, rd_free,
-                    rd_free);
+        rd_map_init(&rmap, cnt, rd_map_str_cmp, rd_map_str_hash, rd_free_fn,
+                    rd_free_fn);
 
         /* pass 0 is set,delete,overwrite,get
          * pass 1-5 is get */

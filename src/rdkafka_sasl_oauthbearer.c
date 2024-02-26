@@ -753,7 +753,7 @@ static char *create_jws_compact_serialization(
         size_t retval_size;
         rd_list_t scope;
 
-        rd_list_init(&scope, 0, rd_free);
+        rd_list_init(&scope, 0, rd_free_fn);
         if (parsed->scope_csv_text) {
                 /* Convert from csv to rd_list_t and
                  * calculate json length. */

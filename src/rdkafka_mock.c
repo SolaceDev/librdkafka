@@ -576,7 +576,7 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
 
         TAILQ_INIT(&mpart->committed_offsets);
 
-        rd_list_init(&mpart->pidstates, 0, rd_free);
+        rd_list_init(&mpart->pidstates, 0, rd_free_fn);
 
         rd_kafka_mock_partition_assign_replicas(mpart, replication_factor);
 }
@@ -2530,7 +2530,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
 
         TAILQ_INIT(&mcluster->coords);
 
-        rd_list_init(&mcluster->pids, 16, rd_free);
+        rd_list_init(&mcluster->pids, 16, rd_free_fn);
 
         TAILQ_INIT(&mcluster->errstacks);
 

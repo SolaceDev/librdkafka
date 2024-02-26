@@ -444,7 +444,7 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
         /* Create a new buffer pointing to the uncompressed
          * allocated buffer (outbuf) and let messages keep a reference to
          * this new buffer. */
-        rkbufz = rd_kafka_buf_new_shadow(iov.iov_base, iov.iov_len, rd_free);
+        rkbufz = rd_kafka_buf_new_shadow(iov.iov_base, iov.iov_len, rd_free_fn);
         rkbufz->rkbuf_rkb = msetr->msetr_rkbuf->rkbuf_rkb;
         rd_kafka_broker_keep(rkbufz->rkbuf_rkb);
 

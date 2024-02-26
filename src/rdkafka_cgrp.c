@@ -1976,7 +1976,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                         goto err;
                 }
 
-                rd_list_init(&topics, member_cnt, rd_free);
+                rd_list_init(&topics, member_cnt, rd_free_fn);
 
                 members = rd_calloc(member_cnt, sizeof(*members));
 
@@ -2179,7 +2179,7 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
         rd_list_t topics;
         rd_kafka_resp_err_t err;
 
-        rd_list_init(&topics, 8, rd_free);
+        rd_list_init(&topics, 8, rd_free_fn);
 
         /* Insert all non-wildcard topics in cache. */
         rd_kafka_metadata_cache_hint_rktparlist(

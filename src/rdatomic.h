@@ -132,7 +132,11 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra,
 #endif
 }
 
-
+static RD_INLINE int32_t RD_UNUSED rd_atomic32_exchange(rd_atomic32_t *ra,
+                                                        int32_t v) {
+        __atomic_exchange(&ra->val, &v, &v, __ATOMIC_SEQ_CST);
+        return v;
+}
 
 static RD_INLINE RD_UNUSED void rd_atomic64_init(rd_atomic64_t *ra, int64_t v) {
         ra->val = v;

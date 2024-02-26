@@ -573,7 +573,7 @@ int rd_kafka_metadata_cache_hint_rktparlist(
         rd_list_t topics;
         int r;
 
-        rd_list_init(&topics, rktparlist->cnt, rd_free);
+        rd_list_init(&topics, rktparlist->cnt, rd_free_fn);
         rd_kafka_topic_partition_list_get_topic_names(rktparlist, &topics,
                                                       0 /*dont include regex*/);
         rd_kafka_wrlock(rk);

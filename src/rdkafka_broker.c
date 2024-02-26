@@ -2388,8 +2388,10 @@ static void rd_kafka_broker_connect_auth(rd_kafka_broker_t *rkb) {
                         if (rd_kafka_sasl_client_new(
                                 rkb->rkb_transport, sasl_errstr,
                                 sizeof(sasl_errstr)) == -1) {
-                                rd_kafka_broker_fail(
-                                    rkb, LOG_ERR,
+                                rd_kafka_broker_fail(rkb,
+                                    strncmp(sasl_errstr,
+                                        "SASL handshake failed", 21)
+                                    ? LOG_ERR: LOG_WARNING,
                                     RD_KAFKA_RESP_ERR__AUTHENTICATION,
                                     "Failed to initialize "
                                     "SASL authentication: %s",

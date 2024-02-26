@@ -31,7 +31,7 @@
 
 
 
-#define rd_kafka_header_destroy rd_free
+#define rd_kafka_header_destroy rd_free_fn
 
 void rd_kafka_headers_destroy(rd_kafka_headers_t *hdrs) {
         rd_list_destroy(&hdrs->rkhdrs_list);
