@@ -158,6 +158,7 @@ static int rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk,
             }
         }
 
+#if 0
         val_ptr = strchr(env_krb5_client_ktname, '=');
         if (val_ptr)
         {
@@ -171,6 +172,7 @@ static int rd_kafka_sasl_cyrus_lock_set_env(rd_kafka_t *rk,
                     *val_ptr = '\0';
             }
         }
+#endif
 
         emit_malloc_info("setenv etc: done");
         return 1;
@@ -837,11 +839,13 @@ void rd_kafka_sasl_cyrus_global_term(void) {
         /* sasl_done(); */
         /* mtx_destroy(&rd_kafka_sasl_cyrus_kinit_lock); */
 
+#if 0
         emit_malloc_info("sasl_client_done: start");
         mallocDebug_setThreadTracking(1);
         sasl_client_done();
         mallocDebug_setThreadTracking(0);
         emit_malloc_info("sasl_client_done: done");
+#endif
 }
 
 
@@ -863,17 +867,18 @@ int rd_kafka_sasl_cyrus_global_init(void) {
             putenv(env_krb5_config);
             putenv(env_krb5ccname);
             putenv(env_krb5_client_ktname);
-        }
 
-        emit_malloc_info("sasl_client_init: start");
-        mallocDebug_setThreadTracking(1);
-        r = sasl_client_init(NULL);
-        mallocDebug_setThreadTracking(0);
-        emit_malloc_info("sasl_client_init: done");
-        if (r != SASL_OK) {
-                fprintf(stderr, "librdkafka: sasl_client_init() failed: %s\n",
-                        sasl_errstring(r, NULL, NULL));
-                return -1;
+            emit_malloc_info("sasl_client_init: start");
+            mallocDebug_setThreadTracking(1);
+            r = sasl_client_init(NULL);
+            mallocDebug_setThreadTracking(0);
+            emit_malloc_info("sasl_client_init: done");
+            if (r != SASL_OK) {
+                    fprintf(stderr, "librdkafka: sasl_client_init() failed: %s\n",
+                            sasl_errstring(r, NULL, NULL));
+                    return -1;
+            }
+
         }
 
         return 0;
