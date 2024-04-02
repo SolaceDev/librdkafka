@@ -5465,6 +5465,9 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT 0x40000
 /** AlterUserScramCredentials_result_t */
 #define RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT 0x80000
+#define RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH 0x100000 /**< SASL/AWS_MSK_IAM
+                                                             credentials need to be
+                                                             refreshed */
 
 /**
  * @returns the event type for the given event.

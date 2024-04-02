@@ -116,6 +116,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_NOTIFYRETRY] = "REPLY:NOTIFYRETRY",
             [RD_KAFKA_OP_UPDATEGRAVEYARDSTATS] = "REPLY:UPDATEGRAVEYARDSTATS",
+            [RD_KAFKA_OP_AWS_MSK_IAM_REFRESH] = "REPLY:AWS_MSK_IAM_REFRESH",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -274,6 +275,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_NOTIFYRETRY] = sizeof(rko->rko_u.dr),
             [RD_KAFKA_OP_UPDATEGRAVEYARDSTATS]  = sizeof(rko->rko_u.graveyard),
+            [RD_KAFKA_OP_AWS_MSK_IAM_REFRESH] = _RD_KAFKA_OP_EMPTY,
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

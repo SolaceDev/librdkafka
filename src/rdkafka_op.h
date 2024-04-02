@@ -174,6 +174,7 @@ typedef enum {
                                                      u.admin_request >*/
         RD_KAFKA_OP_NOTIFYRETRY,               /**< Notify of produce retry */
         RD_KAFKA_OP_UPDATEGRAVEYARDSTATS,      /**< Update graveyard stats */
+        RD_KAFKA_OP_AWS_MSK_IAM_REFRESH, /**< Refresh AWS MSK IAM credentials */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

@@ -56,6 +56,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_sasl_aws_msk_iam.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -2381,6 +2382,10 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC)
                 rk->rk_conf.enabled_events |=
                     RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
+#endif
+#if WITH_SASL_AWS_MSK_IAM
+        rk->rk_conf.enabled_events |=
+                RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH;
 #endif
 
 #if WITH_OAUTHBEARER_OIDC

@@ -43,7 +43,8 @@ rd_kafka_op2event(rd_kafka_op_type_t optype) {
             [RD_KAFKA_OP_LOG]           = RD_KAFKA_EVENT_LOG,
             [RD_KAFKA_OP_STATS]         = RD_KAFKA_EVENT_STATS,
             [RD_KAFKA_OP_OAUTHBEARER_REFRESH] =
-                RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH};
+                RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH,
+            [RD_KAFKA_OP_AWS_MSK_IAM_REFRESH] = RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH};
 
         return map[(int)optype & ~RD_KAFKA_OP_FLAGMASK];
 }
@@ -113,6 +114,7 @@ static RD_UNUSED RD_INLINE int rd_kafka_event_setup(rd_kafka_t *rk,
         case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
         case RD_KAFKA_EVENT_DESCRIBEUSERSCRAMCREDENTIALS_RESULT:
         case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
+        case RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH:
                 return 1;
 
         default:

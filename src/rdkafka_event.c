@@ -90,6 +90,8 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "DescribeUserScramCredentials";
         case RD_KAFKA_EVENT_ALTERUSERSCRAMCREDENTIALS_RESULT:
                 return "AlterUserScramCredentials";
+        case RD_KAFKA_EVENT_AWS_MSK_IAM_CREDENTIAL_REFRESH:
+                return "SaslAwsMskIamCredentialRefresh";
         default:
                 return "?unknown?";
         }

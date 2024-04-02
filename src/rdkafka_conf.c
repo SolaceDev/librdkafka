@@ -215,6 +215,7 @@ struct rd_kafka_property {
 #endif
 
 #define _UNSUPPORTED_OAUTHBEARER _UNSUPPORTED_SSL
+#define _UNSUPPORTED_AWS_MSK_IAM _UNSUPPORTED_SSL
 
 
 static rd_kafka_conf_res_t
@@ -316,7 +317,7 @@ rd_kafka_conf_validate_broker_version(const struct rd_kafka_property *prop,
 }
 
 /**
- * @brief Validate that string is a single item, without delimters (, space).
+ * @brief Validate that string is a single item, without delimiters (, space).
  */
 static RD_UNUSED int
 rd_kafka_conf_validate_single(const struct rd_kafka_property *prop,
@@ -369,6 +370,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL},
              {0x1000, "http", _UNSUPPORTED_HTTP},
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
+             {0x4000, "sasl_aws_msk_iam", _UNSUPPORTED_SSL},
              {0, NULL}}},
     {_RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
      "Client identifier.", .sdef = "rdkafka"},
@@ -910,8 +912,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "for more information."},
 
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanisms", _RK_C_STR, _RK(sasl.mechanisms),
-     "SASL mechanism to use for authentication. "
-     "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
+     "SASL mechanism to use for authentication. Supported: "
+     "GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, AWS_MSK_IAM. "
      "**NOTE**: Despite the name only one mechanism must be configured.",
      .sdef = "GSSAPI", .validate = rd_kafka_conf_validate_single},
     {_RK_GLOBAL | _RK_HIGH, "sasl.mechanism", _RK_C_ALIAS,
@@ -961,6 +963,34 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIGH | _RK_SENSITIVE, "sasl.password", _RK_C_STR,
      _RK(sasl.password),
      "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism"},
+    {_RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.access.key.id", _RK_C_STR,
+     _RK(sasl.aws_access_key_id),
+     "SASL AWS access key id for use with the AWS_MSK_IAM mechanism"},
+    {_RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.secret.access.key", _RK_C_STR,
+     _RK(sasl.aws_secret_access_key),
+     "SASL AWS secret access key for use with the AWS_MSK_IAM mechanism"},
+    {_RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.region", _RK_C_STR,
+     _RK(sasl.aws_region),
+     "SASL AWS region for use with the AWS_MSK_IAM mechanism"},
+    {_RK_GLOBAL, "enable.sasl.aws.use.sts", _RK_C_BOOL,
+     _RK(sasl.enable_use_sts),
+     "Enable the builtin AWS STS credential refresh handler. "
+     "Only use this if you intend to use temporary credentials. "
+     "If you use permanent credentials, keep this with the default (disabled).",
+     0, 1, 0, _UNSUPPORTED_OAUTHBEARER},
+    {_RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.security.token", _RK_C_STR,
+     _RK(sasl.aws_security_token),
+     "SASL AWS security for use with the AWS_MSK_IAM mechanism if using "
+     "STS (temp) credentials" },
+    {_RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role.arn", _RK_C_STR,
+     _RK(sasl.role_arn), "AWS RoleARN to use for calling STS."},
+    { _RK_GLOBAL|_RK_HIGH|_RK_SENSITIVE, "sasl.aws.role.session.name", _RK_C_STR,
+     _RK(sasl.role_session_name), "Session name to use for STS AssumeRole."},
+    { _RK_GLOBAL, "sasl.aws.duration.sec", _RK_C_INT,
+      _RK(sasl.duration_sec), "The duration, in seconds, of the role session. "
+      "Minimum is 900 seconds (15 minutes) and max is 12 hours. "
+      "This will default to 900 seconds if not set.", 900, 43200, 900,
+      _UNSUPPORTED_OAUTHBEARER},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "
