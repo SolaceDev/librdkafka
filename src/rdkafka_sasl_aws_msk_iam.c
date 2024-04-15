@@ -34,6 +34,7 @@
 #include <time.h>
 #include <curl/curl.h>
 #include <sys/time.h>
+#include <libxml/parser.h>
 
 #include "rdkafka_int.h"
 #include "rdkafka_transport.h"
@@ -194,7 +195,10 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
         handle->aws_region = rd_strdup(aws_region);
 
         RD_IF_FREE(handle->aws_security_token, rd_free);
-        handle->aws_security_token = rd_strdup(aws_security_token);
+        if (aws_security_token) {
+                handle->aws_security_token = rd_strdup(aws_security_token);
+        }
+        else handle->aws_security_token = NULL;
 
         handle->wts_md_lifetime = wts_md_lifetime;
 
@@ -229,7 +233,7 @@ rd_kafka_aws_msk_iam_set_credential (rd_kafka_t *rk,
  *              not configured to be the client's authentication mechanism,
  *          \c RD_KAFKA_RESP_ERR__INVALID_ARG if no error string is supplied.
 
- * @sa rd_kafka_aws_msk_iam_set_credential
+ * @sa rd_kafka_aws_msk_iam_set_credential_failure
  */
 static rd_kafka_resp_err_t
 rd_kafka_aws_msk_iam_set_credential_failure (rd_kafka_t *rk, const char *errstr) {
@@ -270,7 +274,6 @@ static int
 rd_kafka_aws_msk_iam_credential_refresh0 (
                                 rd_kafka_t *rk,
                                 rd_kafka_aws_credential_t *credential,
-                                int64_t now_wallclock_ms,
                                 char *errstr, size_t errstr_size) {
         const rd_kafka_conf_t *conf = &rk->rk_conf;
         rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
@@ -295,7 +298,10 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         handle_aws_access_key_id = rd_strdup(handle->aws_access_key_id);
         handle_aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         handle_aws_region = rd_strdup(handle->aws_region);
-        handle_aws_security_token = rd_strdup(handle->aws_security_token);
+        if (handle->aws_security_token) {
+                handle_aws_security_token
+                    = rd_strdup(handle->aws_security_token);
+        }
 
         /* parameters to build request_parameters */
         char *role_arn = rd_kafka_aws_uri_encode(conf->sasl.role_arn);
@@ -343,14 +349,17 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         str_builder_add_str(sb, "T");
         str_builder_add_str(sb, hms);
         str_builder_add_str(sb, "Z");
+        str_builder_add_str(sb, "\n");
         char *canonical_headers = str_builder_dump(sb);
 
         str_builder_destroy(sb);
 
         credential->aws_region = rd_strdup(handle_aws_region);
-        credential->md_lifetime_ms = now_wallclock_ms + conf->sasl.duration_sec * 1000;
+        credential->md_lifetime_ms
+            = rd_uclock() / 1000 + conf->sasl.duration_sec * 1000;
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Sending refresh request to STS");
-        if (rd_kafka_aws_send_request(credential,
+        if (rd_kafka_aws_send_request(rk,
+                                        credential,
                                         ymd,
                                         hms,
                                         host,
@@ -364,8 +373,12 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
                                         canonical_headers,
                                         signed_headers,
                                         request_parameters,
-                                        md) == -1) {
-                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "AWS credential retrieval and parsing failed");
+                                        md,
+                                        errstr,
+                                        errstr_size) == -1) {
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM",
+                    "AWS credential retrieval and parsing failed: %s",
+                    errstr);
                 rd_kafka_sasl_aws_msk_iam_credential_free(credential);
 
                 return -1;
@@ -397,7 +410,7 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
  */
 static void
 rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
-        char errstr[512];
+        char errstr[512] = "";
         rd_kafka_aws_credential_t credential = RD_ZERO_INIT;
         
         rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Checking whether to refresh AWS credentials");
@@ -406,8 +419,7 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
                 rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Use STS enabled, will refresh credentials");
 
                 if (rd_kafka_aws_msk_iam_credential_refresh0(
-                        rk, &credential, 
-                        rd_uclock() / 1000, errstr, sizeof(errstr)) == -1 ||
+                        rk, &credential, errstr, sizeof(errstr)) == -1 ||
                     rd_kafka_aws_msk_iam_set_credential(
                         rk, credential.aws_access_key_id,
                         credential.aws_secret_access_key, credential.aws_region,
@@ -421,6 +433,7 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
 }
 
+#if 0
 /**
  * @brief Op callback for RD_KAFKA_OP_AWS_MSK_IAM_REFRESH
  *
@@ -438,7 +451,9 @@ rd_kafka_aws_msk_iam_refresh_op (rd_kafka_t *rk,
         rd_kafka_aws_msk_iam_credential_refresh(rk, rk->rk_conf.opaque);
         return RD_KAFKA_OP_RES_HANDLED;
 }
+#endif
 
+#if 0
 /**
  * @brief Enqueue a credential refresh.
  * @locks rwlock_wrlock(&handle->lock) MUST be held
@@ -453,7 +468,9 @@ static void rd_kafka_aws_msk_iam_enqueue_credential_refresh (
         handle->wts_enqueued_refresh = rd_uclock();
         rd_kafka_q_enq(handle->rk->rk_rep, rko);
 }
+#endif
 
+#if 0
 /**
  * @brief Enqueue a credential refresh if necessary.
  *
@@ -475,6 +492,7 @@ rd_kafka_aws_msk_iam_enqueue_credential_refresh_if_necessary (
         }
         rwlock_wrunlock(&handle->lock);
 }
+#endif
 
 /**
  * @brief Build client first message
@@ -489,6 +507,7 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
         rd_kafka_transport_t *rktrans, 
         rd_chariov_t *out) {
         struct rd_kafka_sasl_aws_msk_iam_state *state = rktrans->rktrans_sasl.state;
+        rd_kafka_t *rk = rktrans->rktrans_rkb->rkb_rk;
         
         char *aws_service = "kafka-cluster";
         char *algorithm = "AWS4-HMAC-SHA256";
@@ -505,6 +524,7 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
         strftime(hms, sizeof(char) * 7, "%H%M%S", tmp);
 
         char *canonical_querystring = rd_kafka_aws_build_sasl_canonical_querystring(
+                rk,
                 action,
                 state->aws_access_key_id,
                 state->aws_region,
@@ -518,10 +538,15 @@ rd_kafka_sasl_aws_msk_iam_build_client_first_message (
         sb = str_builder_create();
         str_builder_add_str(sb, "host:");
         str_builder_add_str(sb, state->hostname);
+        str_builder_add_str(sb, "\n");
         char *canonical_headers = str_builder_dump(sb);
         str_builder_destroy(sb);
 
-        char *sasl_payload = rd_kafka_aws_build_sasl_payload(ymd,
+        rd_kafka_dbg(rk, SECURITY, "AWS", "canonical_headers=\"%s\"", 
+            canonical_headers);
+
+        char *sasl_payload = rd_kafka_aws_build_sasl_payload(rk,
+                                                        ymd,
                                                         hms,
                                                         state->hostname,
                                                         state->aws_access_key_id,
@@ -642,6 +667,10 @@ static int rd_kafka_sasl_aws_msk_iam_recv (rd_kafka_transport_t *rktrans,
                                      const void *buf, size_t size,
                                      char *errstr, size_t errstr_size) {
         const rd_chariov_t in = { .ptr = (char *)buf, .size = size };
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER,
+            "SASLAWSMSKIAM",
+            "rd_kafka_sasl_aws_msk_iam_recv: buf=%p size=%zu",
+            buf, size);
         return rd_kafka_sasl_aws_msk_iam_fsm(rktrans, &in, errstr, errstr_size);
 }
 
@@ -658,7 +687,6 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
         rd_kafka_sasl_aws_msk_iam_handle_t *handle = 
                 rktrans->rktrans_rkb->rkb_rk->rk_sasl.handle;
         struct rd_kafka_sasl_aws_msk_iam_state *state;
-        const rd_kafka_conf_t *conf = &rktrans->rktrans_rkb->rkb_rk->rk_conf;
         
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY | RD_KAFKA_DBG_BROKER, "SASLAWSMSKIAM",
                    "SASL AWS MSK IAM new client initializing");
@@ -696,7 +724,7 @@ static int rd_kafka_sasl_aws_msk_iam_client_new (rd_kafka_transport_t *rktrans,
         state->aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         state->aws_region = rd_strdup(handle->aws_region);
         
-        if (conf->sasl.aws_security_token != NULL) {
+        if (handle->aws_security_token != NULL) {
             state->aws_security_token = rd_strdup(handle->aws_security_token);
         }
 
@@ -715,10 +743,7 @@ static void
 rd_kafka_sasl_aws_msk_iam_credential_refresh_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg) {
         rd_kafka_t *rk = arg;
-        rd_kafka_sasl_aws_msk_iam_handle_t *handle = rk->rk_sasl.handle;
-
-        /* Enqueue a token refresh if necessary */
-        rd_kafka_aws_msk_iam_enqueue_credential_refresh_if_necessary(handle);
+        rd_kafka_aws_msk_iam_credential_refresh(rk, rk->rk_conf.opaque);
 }
 
 /**
@@ -737,12 +762,6 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
 
         handle->rk = rk;
 
-        rd_kafka_timer_start(&rk->rk_timers, &handle->credential_refresh_tmr,
-                             1 * 1000 * 1000,
-                             rd_kafka_sasl_aws_msk_iam_credential_refresh_tmr_cb,
-                             rk);
-
-        rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM", "Enqueuing credential refresh");
 
         // Set initial handle creds which will be passed into *state in client_new()
         /* Check if SASL/AWS_MSK_IAM is the configured auth mechanism */
@@ -765,6 +784,22 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
 
         if (conf->sasl.aws_security_token != NULL) {
             handle->aws_security_token = rd_strdup(conf->sasl.aws_security_token);
+        }
+
+        if (conf->sasl.enable_use_sts && conf->sasl.duration_sec > 0) {
+                /* Schedule a refresh 80% through its remaining lifetime */
+                rd_kafka_timer_start(&rk->rk_timers,
+                                     &handle->credential_refresh_tmr,
+                                     conf->sasl.duration_sec * 800ull * 1000ull,
+                                     rd_kafka_sasl_aws_msk_iam_credential_refresh_tmr_cb,
+                                     rk);
+                /* Kick off the timer immediately to refresh the credentials.
+                 * (Timer is triggered from the main loop). */
+                rd_kafka_timer_override_once(&rk->rk_timers,
+                                             &handle->credential_refresh_tmr,
+                                             0 /*immediately*/);
+                rd_kafka_dbg(rk, SECURITY, "SASLAWSMSKIAM",
+                             "Enqueuing credential refresh");
         }
 
         handle->wts_md_lifetime = wts_md_lifetime;
@@ -833,10 +868,26 @@ static int rd_kafka_sasl_aws_msk_iam_conf_validate (rd_kafka_t *rk,
         }
 
         if (rk->rk_conf.sasl.enable_use_sts && 
-                (!rk->rk_conf.sasl.aws_security_token || !rk->rk_conf.sasl.role_arn || !rk->rk_conf.sasl.role_session_name)) {
+                (!rk->rk_conf.sasl.role_arn || !rk->rk_conf.sasl.role_session_name)) {
                 rd_snprintf(errstr, errstr_size,
-                            "sasl.enable_use_sts is true but missing sasl.aws_security_token or sasl.role_arn or sasl.role_session_name");
+                            "sasl.enable_use_sts is true but missing sasl.role_arn or sasl.role_session_name");
                 return -1;
+        }
+        
+        return 0;
+}
+
+void rd_kafka_sasl_aws_msk_iam_global_term(void) {
+        #if 0
+                xmlCleanupParser(); 
+        #endif
+}
+
+int rd_kafka_sasl_aws_msk_iam_global_init(void) {
+        static rd_atomic32_t has_been_called;
+
+        if (!rd_atomic32_exchange(&has_been_called, 1)) {
+                xmlInitParser();
         }
         
         return 0;

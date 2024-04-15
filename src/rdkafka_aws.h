@@ -47,6 +47,7 @@ typedef struct rd_kafka_aws_credential_s {
 
 char *rd_kafka_aws_uri_encode (const char *in);
 char *rd_kafka_aws_build_sasl_canonical_querystring (
+        rd_kafka_t* rk,
         const char *action,
         const char *aws_access_key_id,
         const char *aws_region,
@@ -55,6 +56,7 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (
         const char *aws_service,
         const char *aws_security_token);
 char *rd_kafka_aws_build_sasl_payload (
+        rd_kafka_t* rk,
         const char *ymd,
         const char *hms,
         const char *host,
@@ -71,6 +73,7 @@ char *rd_kafka_aws_build_sasl_payload (
         const char *request_parameters,
         const EVP_MD *md);
 int rd_kafka_aws_send_request (
+        rd_kafka_t* rk,
         rd_kafka_aws_credential_t *credential,
         const char *ymd,
         const char *hms,
@@ -85,7 +88,9 @@ int rd_kafka_aws_send_request (
         const char *canonical_headers,
         const char *signed_headers,
         const char *request_parameters,
-        const EVP_MD *md);
+        const EVP_MD *md,
+        char *errbuf,
+        size_t errbuf_size);
 
 int unittest_aws (void);
 

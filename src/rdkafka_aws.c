@@ -76,7 +76,9 @@ static size_t rd_kafka_aws_curl_write_callback(char *ptr, size_t size, size_t nm
     size_t realsize = size * nmemb; 
     curl_in_mem_buf *req = (curl_in_mem_buf *) userdata;
 
-    printf("received chunk of %zu bytes\n", realsize);
+    #if 0
+            printf("received chunk of %zu bytes\n", realsize);
+    #endif    
 
     while (req->buflen < req->len + realsize + 1)
     {
@@ -88,6 +90,40 @@ static size_t rd_kafka_aws_curl_write_callback(char *ptr, size_t size, size_t nm
     req->buffer[req->len] = 0;
 
     return realsize;
+}
+
+static int rd_kafak_aws_curl_debug_callback(CURL* curl,
+                                            curl_infotype type,
+                                            char *data,
+                                            size_t size,
+                                            void *rkv) {
+        rd_kafka_t *rk = rkv;
+        
+        switch (type) {
+                case CURLINFO_TEXT:
+                        rd_kafka_dbg(rk, SECURITY, "CURLINFO_TEXT", 
+                            "%*s", (int) size, data);
+                        break;
+                case CURLINFO_HEADER_IN:
+                        rd_kafka_dbg(rk, SECURITY, "CURLINFO_HEADER_IN", 
+                            "%*s", (int) size, data);
+                        break;
+                case CURLINFO_HEADER_OUT:
+                        rd_kafka_dbg(rk, SECURITY, "CURLINFO_HEADER_OUT", 
+                            "%*s", (int) size, data);
+                        break;
+                case CURLINFO_DATA_IN:
+                        rd_kafka_dbg(rk, SECURITY, "CURLINFO_DATA_IN", 
+                            "%*s", (int) size, data);
+                        break;
+                case CURLINFO_DATA_OUT:
+                        rd_kafka_dbg(rk, SECURITY, "CURLINFO_DATA_OUT", 
+                            "%*s", (int) size, data);
+                        break;
+                
+                default: break;
+        }
+        return 0;
 }
 
 /**
@@ -183,7 +219,8 @@ static char *rd_kafka_aws_construct_credential_scope (const char *ymd,
  * @brief Generates a canonical query string
  * @remark canonical_query_string will be allocated and must be freed.
  */
-char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
+char *rd_kafka_aws_build_sasl_canonical_querystring (rd_kafka_t* rk,
+                                                const char *action,
                                                 const char *aws_access_key_id,
                                                 const char *aws_region,
                                                 const char *ymd,
@@ -244,6 +281,9 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
         RD_IF_FREE(amz_date, rd_free);
         RD_IF_FREE(uri_amz_date, rd_free);
         
+        rd_kafka_dbg(rk, SECURITY, "AWS", "canonical_query_string=\"%s\"", 
+            canonical_query_string);
+
         return canonical_query_string;
 }
 
@@ -251,8 +291,7 @@ char *rd_kafka_aws_build_sasl_canonical_querystring (const char *action,
  * @brief Generates a generic canonical request
  * @remark canonical_request will be allocated and must be freed.
  */
-static char *rd_kafka_aws_build_canonical_request (const char *hostname,
-                                        const char *method,
+static char *rd_kafka_aws_build_canonical_request (const char *method,
                                         const char *canonical_query_string,
                                         const char *canonical_headers,
                                         const char *signed_headers,
@@ -282,7 +321,7 @@ static char *rd_kafka_aws_build_canonical_request (const char *hostname,
         str_builder_add_str(sb, canonical_query_string);
         str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, canonical_headers);
-        str_builder_add_str(sb, "\n\n");
+        str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, signed_headers);
         str_builder_add_str(sb, "\n");
         str_builder_add_str(sb, payload_hash);
@@ -354,30 +393,47 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
         
         str_builder_destroy(sb);
         
-        unsigned char *hmac_date_key;
-        unsigned int hmac_date_key_len = 32;
-        hmac_date_key = rd_kafka_aws_hmac_sha256((unsigned char *)date_key, strlen(date_key), (unsigned char *)ymd, strlen(ymd), NULL, NULL);
+        unsigned char hmac_date_key[EVP_MAX_MD_SIZE];
+        unsigned int hmac_date_key_len = sizeof(hmac_date_key);
+        rd_kafka_aws_hmac_sha256(
+            (unsigned char *)date_key, strlen(date_key),
+            (unsigned char *)ymd, strlen(ymd),
+            hmac_date_key, &hmac_date_key_len);
         
-        unsigned char *hmac_date_region_key;
-        unsigned int hmac_date_region_key_len = 32;
-        hmac_date_region_key = rd_kafka_aws_hmac_sha256(hmac_date_key, hmac_date_key_len, (unsigned char *)aws_region, strlen(aws_region), NULL, NULL);
+        unsigned char hmac_date_region_key[EVP_MAX_MD_SIZE];
+        unsigned int hmac_date_region_key_len = sizeof(hmac_date_region_key);
+        rd_kafka_aws_hmac_sha256(
+            hmac_date_key, hmac_date_key_len,
+            (unsigned char *)aws_region, strlen(aws_region),
+            hmac_date_region_key, &hmac_date_region_key_len);
       
-        unsigned char *hmac_date_region_service_key;
-        unsigned int hmac_date_region_service_key_len = 32;
-        hmac_date_region_service_key = rd_kafka_aws_hmac_sha256(hmac_date_region_key, hmac_date_region_key_len, (unsigned char *)aws_service, strlen(aws_service), NULL, NULL);
+        unsigned char hmac_date_region_service_key[EVP_MAX_MD_SIZE];
+        unsigned int hmac_date_region_service_key_len
+            = sizeof(hmac_date_region_service_key);
+        rd_kafka_aws_hmac_sha256(
+            hmac_date_region_key, hmac_date_region_key_len,
+            (unsigned char *)aws_service, strlen(aws_service),
+            hmac_date_region_service_key,
+            &hmac_date_region_service_key_len);
               
-        unsigned char *hmac_signing_key;
-        unsigned int hmac_signing_key_len = 32;
-        hmac_signing_key = rd_kafka_aws_hmac_sha256(hmac_date_region_service_key, hmac_date_region_service_key_len, (unsigned char *)"aws4_request", strlen("aws4_request"), NULL, NULL);
+        unsigned char hmac_signing_key[EVP_MAX_MD_SIZE];
+        unsigned int hmac_signing_key_len = sizeof(hmac_signing_key);
+        rd_kafka_aws_hmac_sha256(
+            hmac_date_region_service_key, hmac_date_region_service_key_len,
+            (unsigned char *)"aws4_request", strlen("aws4_request"),
+            hmac_signing_key, &hmac_signing_key_len);
 
-        unsigned char *hmac_signature;
-        unsigned int hmac_signature_len = 32;
-        hmac_signature = rd_kafka_aws_hmac_sha256(hmac_signing_key, hmac_signing_key_len, (unsigned char *)string_to_sign, strlen(string_to_sign), NULL, NULL);
+        unsigned char hmac_signature[EVP_MAX_MD_SIZE];
+        unsigned int hmac_signature_len = sizeof(hmac_signature);
+        rd_kafka_aws_hmac_sha256(
+            hmac_signing_key, hmac_signing_key_len,
+            (unsigned char *)string_to_sign, strlen(string_to_sign),
+            hmac_signature, &hmac_signature_len);
         
-        char res_hexstring[65];
+        char res_hexstring[EVP_MAX_MD_SIZE * 2 + 1];
         for (i = 0; i < hmac_signature_len; i++)
                sprintf(&(res_hexstring[i * 2]), "%02x", hmac_signature[i]);  // save string in hex base 16
-        res_hexstring[64] = '\0';
+        res_hexstring[2 * hmac_signature_len] = '\0';
         
         char *signature = rd_strdup(res_hexstring);
         
@@ -386,7 +442,8 @@ static char *rd_kafka_aws_build_signature (const char *aws_secret_access_key,
         return signature;
 }
 
-int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
+int rd_kafka_aws_send_request (rd_kafka_t* rk,
+                        rd_kafka_aws_credential_t *credential,
                         const char *ymd,
                         const char *hms,
                         const char *host,
@@ -400,9 +457,13 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                         const char *canonical_headers,
                         const char *signed_headers,
                         const char *request_parameters,
-                        const EVP_MD *md) {
+                        const EVP_MD *md,
+                        char* errbuf,
+                        size_t errbuf_size) {
+                        
+        int ret = 1;
+        
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 "",
                 canonical_headers,
@@ -410,6 +471,10 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 request_parameters,
                 md
         );
+
+        rd_kafka_dbg(rk, SECURITY, "AWS", "canonical_request=\"%s\"", 
+            canonical_request);
+
         char *credential_scope = rd_kafka_aws_construct_credential_scope(
                 ymd,
                 aws_region,
@@ -423,6 +488,10 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 canonical_request,
                 md
         );
+
+        rd_kafka_dbg(rk, SECURITY, "AWS", "string_to_sign=\"%s\"", 
+            string_to_sign);
+
         char *signature = rd_kafka_aws_build_signature(
                 aws_secret_access_key,
                 aws_region,
@@ -445,14 +514,78 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
         curl_in_mem_buf req = {.buffer = NULL, .len = 0, .buflen = 0};
 
         if (curl) {
+                char curl_errbuf[CURL_ERROR_SIZE] = "";
+                xmlDoc *document = NULL;
+                xmlNode *cur = NULL;
+                char *curl_host = NULL;
+                char *curl_host_header = NULL;
+                char *curl_content_length_header = NULL;
+                char *curl_auth_header = NULL;
+                char *curl_amz_date_header = NULL;
+                char *curl_amz_security_token_header = NULL;
+                char content_length[256];
+                struct curl_slist *headers = NULL;
+                
                 str_builder_t *sb;
                 sb = str_builder_create();
 
+                curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
+                curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION,
+                    rd_kafak_aws_curl_debug_callback);
+                curl_easy_setopt(curl, CURLOPT_DEBUGDATA, rk);
+                curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+                if (rk->rk_conf.ssl.cert_location) {
+                        curl_easy_setopt(curl, CURLOPT_SSLCERT,
+                                         rk->rk_conf.ssl.cert_location);
+                }
+#               ifdef CURLOPTTYPE_BLOB
+                if (rk->rk_conf.ssl.cert_pem) {
+                        struct curl_blob blob;
+                        blob.data = rk->rk_conf.ssl.cert_pem;
+                        blob.len = strlen(rk->rk_conf.ssl.cert_pem);
+                        blob.flags = CURL_BLOB_COPY;
+                        curl_easy_setopt(curl, CURLOPT_SSLCERT_BLOB, &blob);
+                        curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, "PEM");
+                }
+#               endif
+                if (rk->rk_conf.ssl.key_location) {
+                        curl_easy_setopt(curl, CURLOPT_SSLKEY,
+                                         rk->rk_conf.ssl.key_location);
+                }
+#               ifdef CURLOPTTYPE_BLOB
+                if (rk->rk_conf.ssl.key_pem) {
+                        struct curl_blob blob;
+                        blob.data = rk->rk_conf.ssl.key_pem;
+                        blob.len = strlen(rk->rk_conf.ssl.key_pem);
+                        blob.flags = CURL_BLOB_COPY;
+                        curl_easy_setopt(curl, CURLOPT_SSLKEY_BLOB, &blob);
+                        curl_easy_setopt(curl, CURLOPT_SSLKEYTYPE, "PEM");
+                }
+#               endif
+                if (rk->rk_conf.ssl.key_password) {
+                        curl_easy_setopt(curl, CURLOPT_KEYPASSWD,
+                                         rk->rk_conf.ssl.key_password);
+                }
+                if (rk->rk_conf.ssl.ca_location) {
+                        curl_easy_setopt(curl, CURLOPT_CAPATH,
+                                         rk->rk_conf.ssl.ca_location);
+                }
+#               ifdef CURLOPTTYPE_BLOB
+                if (rk->rk_conf.ssl.ca_pem) {
+                        struct curl_blob blob;
+                        blob.data = rk->rk_conf.ssl.ca_pem;
+                        blob.len = strlen(rk->rk_conf.ssl.ca_pem);
+                        blob.flags = CURL_BLOB_COPY;
+                        curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &blob);
+                }
+#               endif
+        
                 curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
 
                 str_builder_add_str(sb, "https://");
                 str_builder_add_str(sb, host);
-                char *curl_host = str_builder_dump(sb);
+                curl_host = str_builder_dump(sb);
                 str_builder_clear(sb);
                 curl_easy_setopt(curl, CURLOPT_URL, curl_host);
 
@@ -469,37 +602,34 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                 curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_parameters);
 
                 // /* Set Curl headers */
-                struct curl_slist *headers = NULL;
                 str_builder_add_str(sb, "Host: ");
                 str_builder_add_str(sb, host);
-                char *curl_host_header = str_builder_dump(sb);
+                curl_host_header = str_builder_dump(sb);
                 str_builder_clear(sb);
                 headers = curl_slist_append(headers, curl_host_header);
                 headers = curl_slist_append(headers, "User-Agent: librdkafka");
 
-                char content_length[256];
                 rd_snprintf(content_length, sizeof(content_length), "%zu", strlen(request_parameters));
                 str_builder_add_str(sb, "Content-Length: ");
                 str_builder_add_str(sb, content_length);
-                char *curl_content_length_header = str_builder_dump(sb);
+                curl_content_length_header = str_builder_dump(sb);
                 str_builder_clear(sb);
                 headers = curl_slist_append(headers, curl_content_length_header);
                 headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded; charset=utf-8");
 
                 str_builder_add_str(sb, "Authorization: ");
                 str_builder_add_str(sb, authorization_header);
-                char *curl_auth_header = str_builder_dump(sb);
+                curl_auth_header = str_builder_dump(sb);
                 str_builder_clear(sb);
                 headers = curl_slist_append(headers, curl_auth_header);
 
                 str_builder_add_str(sb, "X-Amz-Date: ");
                 str_builder_add_str(sb, amz_date);
-                char *curl_amz_date_header = str_builder_dump(sb);
+                curl_amz_date_header = str_builder_dump(sb);
                 str_builder_clear(sb);
                 headers = curl_slist_append(headers, curl_amz_date_header);
                 headers = curl_slist_append(headers, "Accept-Encoding: gzip");
 
-                char *curl_amz_security_token_header = NULL;
                 if (aws_security_token != NULL) {
                         str_builder_add_str(sb, "X-Amz-Security-Token: ");
                         str_builder_add_str(sb, aws_security_token);
@@ -508,26 +638,25 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
                         headers = curl_slist_append(headers, curl_amz_security_token_header);
                 }
                 
-                str_builder_destroy(sb);
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
                 res = curl_easy_perform(curl);
                 if (res != CURLE_OK) {
-                        fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-                        return -1;
+                        ret = -1;
+                        goto cleanup_and_exit;
                 }
 
-                xmlDoc *document;
-                xmlNode *cur;
+                rd_kafka_dbg(rk, SECURITY, "AWS", "curl_easy_perform() -> %d", (int) res);
+
                 document = xmlReadMemory((char *)req.buffer, req.len, "assume_role_response.xml", NULL, 0);
                 if (document == NULL) {
-                        fprintf(stderr, "Failed to parse document\n");
-                        return -1;
+                        ret = -1;
+                        goto cleanup_and_exit;
                 }
                 cur = xmlDocGetRootElement(document);
                 if (xmlStrcmp(cur->name, (const xmlChar *)"ErrorResponse") == 0) {
-                        fprintf(stderr, "Error occurred in AssumeRole call: %s\n", req.buffer);
-                        return -1;
+                        ret = -1;
+                        goto cleanup_and_exit;
                 }
                 cur = cur->children;
                 while (cur != NULL) {
@@ -566,28 +695,38 @@ int rd_kafka_aws_send_request (rd_kafka_aws_credential_t *credential,
 
                         cur = cur->next;
                 }
+                
+                ret = 0;
 
-                xmlFreeDoc(document);
-                xmlCleanupParser();
+        cleanup_and_exit:
+                if (document) xmlFreeDoc(document);
 
-                rd_free(req.buffer);
-                rd_free(curl_host);
-                rd_free(curl_host_header);
-                rd_free(curl_content_length_header);
-                rd_free(curl_auth_header);
-                rd_free(curl_amz_date_header);
+                RD_IF_FREE(req.buffer, rd_free);
+                RD_IF_FREE(curl_host, rd_free);
+                RD_IF_FREE(curl_host_header, rd_free);
+                RD_IF_FREE(curl_content_length_header, rd_free);
+                RD_IF_FREE(curl_auth_header, rd_free);
+                RD_IF_FREE(curl_amz_date_header, rd_free);
                 RD_IF_FREE(curl_amz_security_token_header, rd_free);
+                
+                if (sb) str_builder_destroy(sb);
+
+                if (curl_errbuf[0] && errbuf && (errbuf_size > 0)) {
+                        strncpy(errbuf, curl_errbuf, errbuf_size);
+                        errbuf[errbuf_size - 1] = '\0';
+                }
         }
         curl_easy_cleanup(curl);
 
-        return 1;
+        return ret;
 }
 
 /**
  * @brief Generates a sasl_payload
  * @remark sasl_payload will be allocated and must be freed.
  */
-char *rd_kafka_aws_build_sasl_payload (const char *ymd,
+char *rd_kafka_aws_build_sasl_payload (rd_kafka_t* rk,
+                                const char *ymd,
                                 const char *hms,
                                 const char *host,
                                 const char *aws_access_key_id, 
@@ -603,7 +742,6 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
                                 const char *request_parameters,
                                 const EVP_MD *md) {
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 canonical_querystring,
                 canonical_headers,
@@ -612,11 +750,17 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
                 md
         );
 
+        rd_kafka_dbg(rk, SECURITY, "AWSSASLPAYLOAD", "canonical_request=\"%s\"", 
+            canonical_request);
+
         char *credential_scope = rd_kafka_aws_construct_credential_scope(
                 ymd,
                 aws_region,
                 aws_service
         );
+
+        rd_kafka_dbg(rk, SECURITY, "AWSSASLPAYLOAD", "credential_scope=\"%s\"", 
+            credential_scope);
 
         char *amz_date = rd_kafka_aws_construct_amz_date(ymd, hms);
         char *string_to_sign = rd_kafka_aws_build_string_to_sign(
@@ -627,6 +771,9 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
                 md
         );
 
+        rd_kafka_dbg(rk, SECURITY, "AWSSASLPAYLOAD", "string_to_sign=\"%s\"", 
+            string_to_sign);
+
         char *signature = rd_kafka_aws_build_signature(
                 aws_secret_access_key,
                 aws_region,
@@ -634,6 +781,9 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
                 aws_service,
                 string_to_sign
         );
+
+        rd_kafka_dbg(rk, SECURITY, "AWSSASLPAYLOAD", "signature=\"%s\"", 
+            signature);
 
         /* Construct JSON payload */
         str_builder_t *sb;
@@ -677,6 +827,9 @@ char *rd_kafka_aws_build_sasl_payload (const char *ymd,
         RD_IF_FREE(string_to_sign, rd_free);
         RD_IF_FREE(signature, rd_free);
         
+        rd_kafka_dbg(rk, SECURITY, "AWSSASLPAYLOAD", "sasl_payload=\"%s\"", 
+            sasl_payload);
+
         return sasl_payload;
 }
 
@@ -707,6 +860,7 @@ static int unittest_build_sasl_payload (void) {
         char *request_parameters = "";
 
         char *canonical_querystring = rd_kafka_aws_build_sasl_canonical_querystring(
+                NULL,
                 "kafka-cluster:Connect",
                 aws_access_key_id,
                 aws_region,
@@ -719,7 +873,7 @@ static int unittest_build_sasl_payload (void) {
         char *expected_canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
         RD_UT_ASSERT(strcmp(expected_canonical_querystring, canonical_querystring) == 0, "expected: %s\nactual: %s", expected_canonical_querystring, canonical_querystring);
         
-        char *sasl_payload = rd_kafka_aws_build_sasl_payload(
+        char *sasl_payload = rd_kafka_aws_build_sasl_payload(NULL,
                 ymd,
                 hms,
                 host,
@@ -768,13 +922,11 @@ static int unittest_build_sts_request (void) {
         char *algorithm = "AWS4-HMAC-SHA256";
         char *canonical_headers = "content-length:171\ncontent-type:application/x-www-form-urlencoded; charset=utf-8\nhost:sts.amazonaws.com\nx-amz-date:20210910T190714Z";
         char *signed_headers = "content-length;content-type;host;x-amz-date";
-        char *host = "sts.amazonaws.com";
         char *method = "POST";
         char *canonical_querystring = "";
         char *request_parameters = "Action=AssumeRole&DurationSeconds=900&RoleArn=arn%3Aaws%3Aiam%3A%3A789750736714%3Arole%2FIdentity_Account_Access_Role&RoleSessionName=librdkafka_session&Version=2011-06-15";
 
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 canonical_querystring,
                 canonical_headers,
@@ -851,13 +1003,11 @@ static int unittest_build_signature (void) {
         char *algorithm = "AWS4-HMAC-SHA256";
         char *canonical_headers = "host:hostname";
         char *signed_headers = "host";
-        char *host = "hostname";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
         char *request_parameters = "";
 
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 canonical_querystring,
                 canonical_headers,
@@ -914,13 +1064,11 @@ static int unittest_build_canonical_request_with_security_token (void) {
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
         char *canonical_headers = "host:hostname";
         char *signed_headers = "host";
-        char *host = "hostname";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-Security-Token=security-token&X-Amz-SignedHeaders=host";
         char *request_parameters = "";
 
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 canonical_querystring,
                 canonical_headers,
@@ -956,13 +1104,11 @@ static int unittest_build_canonical_request (void) {
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
         char *canonical_headers = "host:hostname";
         char *signed_headers = "host";
-        char *host = "hostname";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
         char *request_parameters = "";
 
         char *canonical_request = rd_kafka_aws_build_canonical_request(
-                host,
                 method,
                 canonical_querystring,
                 canonical_headers,
