@@ -474,15 +474,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000 && \
-    OPENSSL_VERSION_NUMBER < 0x1000200fL && \
-    !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
-                goto fail;
-#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
                 X509_VERIFY_PARAM *param;
-
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
                 if (!ipAddrAsc &&
@@ -502,8 +496,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s", name);
-
+                   "Enabled endpoint identification using %s %s",
+                   ipAddrAsc ? "address" : "hostname", name);
         return 0;
 
 fail:
