@@ -284,7 +284,7 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         char *handle_aws_access_key_id;
         char *handle_aws_secret_access_key;
         char *handle_aws_region;
-        char *handle_aws_security_token = NULL;
+        char *external_id = NULL;
         memset(credential, 0, sizeof(*credential));
 
         time_t t = time(&t);
@@ -298,14 +298,14 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         handle_aws_access_key_id = rd_strdup(handle->aws_access_key_id);
         handle_aws_secret_access_key = rd_strdup(handle->aws_secret_access_key);
         handle_aws_region = rd_strdup(handle->aws_region);
-        if (handle->aws_security_token) {
-                handle_aws_security_token
-                    = rd_strdup(handle->aws_security_token);
-        }
 
         /* parameters to build request_parameters */
         char *role_arn = rd_kafka_aws_uri_encode(conf->sasl.role_arn);
         char *role_session_name = rd_strdup(conf->sasl.role_session_name);
+        if (conf->sasl.aws_external_id) {
+                external_id = rd_kafka_aws_uri_encode(
+                    conf->sasl.aws_external_id);
+        }
 
         char duration_sec[256];
         rd_snprintf(duration_sec, sizeof(duration_sec), "%d", conf->sasl.duration_sec);
@@ -329,6 +329,10 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         str_builder_add_str(sb, role_arn);
         str_builder_add_str(sb, "&RoleSessionName=");
         str_builder_add_str(sb, role_session_name);
+        if (external_id) {
+                str_builder_add_str(sb, "&ExternalId=");
+                str_builder_add_str(sb, external_id);
+        }
         str_builder_add_str(sb, "&Version=");
         str_builder_add_str(sb, version);
         char *request_parameters = str_builder_dump(sb);
@@ -365,7 +369,6 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
                                         host,
                                         handle_aws_access_key_id,
                                         handle_aws_secret_access_key,
-                                        handle_aws_security_token,
                                         handle_aws_region,
                                         aws_service,
                                         method,
@@ -389,9 +392,9 @@ rd_kafka_aws_msk_iam_credential_refresh0 (
         RD_IF_FREE(handle_aws_access_key_id, rd_free);
         RD_IF_FREE(handle_aws_secret_access_key, rd_free);
         RD_IF_FREE(handle_aws_region, rd_free);
-        RD_IF_FREE(handle_aws_security_token, rd_free);
         RD_IF_FREE(ymd, rd_free);
         RD_IF_FREE(hms, rd_free);
+        RD_IF_FREE(external_id, rd_free);
         RD_IF_FREE(role_session_name, rd_free);
         RD_IF_FREE(role_arn, rd_free);
         RD_IF_FREE(canonical_headers, rd_free);
@@ -781,10 +784,6 @@ static int rd_kafka_sasl_aws_msk_iam_init (rd_kafka_t *rk,
         handle->aws_access_key_id = rd_strdup(conf->sasl.aws_access_key_id);
         handle->aws_secret_access_key = rd_strdup(conf->sasl.aws_secret_access_key);
         handle->aws_region = rd_strdup(conf->sasl.aws_region);
-
-        if (conf->sasl.aws_security_token != NULL) {
-            handle->aws_security_token = rd_strdup(conf->sasl.aws_security_token);
-        }
 
         if (conf->sasl.enable_use_sts && conf->sasl.duration_sec > 0) {
                 /* Schedule a refresh 80% through its remaining lifetime */

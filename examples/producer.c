@@ -90,7 +90,7 @@ int main (int argc, char **argv) {
         const char *aws_access_key_id;          /* Argument: aws access key id for IAM auth */
         const char *aws_secret_access_key;      /* Argument: aws secret access key for IAM auth */
         const char *aws_region;                 /* Argument: aws region for IAM auth */
-        const char *aws_security_token;         /* Argument: aws security token for temp credentials */
+        const char *aws_external_id;            /* Argument: aws external ID for temp credentials */
         const char *role_arn;                   /* Argument: aws RoleARN to use for STS */
         const char *role_session_name;          /* Argument: aws session name to use for STS */
 
@@ -112,7 +112,7 @@ int main (int argc, char **argv) {
             aws_access_key_id = argv[3];
             aws_secret_access_key = argv[4];
             aws_region = argv[5];
-            aws_security_token = argv[6];
+            aws_external_id = argv[6];
             role_arn = argv[7];
             role_session_name = argv[8];
         } else {
@@ -175,7 +175,7 @@ int main (int argc, char **argv) {
         }
 
         if (argc == 9) {
-            if (rd_kafka_conf_set(conf, "sasl.aws.security.token", aws_security_token,
+            if (rd_kafka_conf_set(conf, "sasl.aws.external.id", aws_external_id,
                                   errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                     fprintf(stderr, "%s\n", errstr);
                     return 1;

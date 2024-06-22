@@ -449,7 +449,6 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
                         const char *host,
                         const char *aws_access_key_id,
                         const char *aws_secret_access_key,
-                        const char *aws_security_token,
                         const char *aws_region,
                         const char *aws_service,
                         const char *method,
@@ -630,14 +629,6 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
                 headers = curl_slist_append(headers, curl_amz_date_header);
                 headers = curl_slist_append(headers, "Accept-Encoding: gzip");
 
-                if (aws_security_token != NULL) {
-                        str_builder_add_str(sb, "X-Amz-Security-Token: ");
-                        str_builder_add_str(sb, aws_security_token);
-                        curl_amz_security_token_header = str_builder_dump(sb);
-                        str_builder_clear(sb);
-                        headers = curl_slist_append(headers, curl_amz_security_token_header);
-                }
-                
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
                 res = curl_easy_perform(curl);

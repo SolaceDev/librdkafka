@@ -80,7 +80,6 @@ int rd_kafka_aws_send_request (
         const char *host,
         const char *aws_access_key_id,
         const char *aws_secret_access_key,
-        const char *aws_security_token,
         const char *aws_region,
         const char *aws_service,
         const char *method,
