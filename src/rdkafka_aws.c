@@ -460,7 +460,7 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
                         char* errbuf,
                         size_t errbuf_size) {
                         
-        int ret = 1;
+        int ret = RD_KAFKA_RESP_ERR_UNKNOWN;
         
         char *canonical_request = rd_kafka_aws_build_canonical_request(
                 method,
@@ -514,8 +514,6 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
 
         if (curl) {
                 char curl_errbuf[CURL_ERROR_SIZE] = "";
-                xmlDoc *document = NULL;
-                xmlNode *cur = NULL;
                 char *curl_host = NULL;
                 char *curl_host_header = NULL;
                 char *curl_content_length_header = NULL;
@@ -633,64 +631,140 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
 
                 res = curl_easy_perform(curl);
                 if (res != CURLE_OK) {
-                        ret = -1;
-                        goto cleanup_and_exit;
+                    if (errbuf) rd_strlcpy(errbuf, curl_errbuf, errbuf_size);
+                    goto cleanup_and_exit;
                 }
 
                 rd_kafka_dbg(rk, SECURITY, "AWS", "curl_easy_perform() -> %d", (int) res);
-
-                document = xmlReadMemory((char *)req.buffer, req.len, "assume_role_response.xml", NULL, 0);
-                if (document == NULL) {
-                        ret = -1;
-                        goto cleanup_and_exit;
-                }
-                cur = xmlDocGetRootElement(document);
-                if (xmlStrcmp(cur->name, (const xmlChar *)"ErrorResponse") == 0) {
-                        ret = -1;
-                        goto cleanup_and_exit;
-                }
-                cur = cur->children;
-                while (cur != NULL) {
-                        if (!xmlStrcmp(cur->name, (const xmlChar *)"AssumeRoleResult")) {
-                                break;
-                        }
-                        cur = cur->next;
-                }
-
-                cur = cur->children;
-                while (cur != NULL) {
-                        if (!xmlStrcmp(cur->name, (const xmlChar *)"Credentials")) {
-                                break;
-                        }
-                        cur = cur->next;
-                }
-                cur = cur->children;
-                while (cur != NULL) {
-                        if (!xmlStrcmp(cur->name, (const xmlChar *)"AccessKeyId")) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_access_key_id = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        if (!xmlStrcmp(cur->name, (const xmlChar *)"SecretAccessKey")) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_secret_access_key = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        if (!xmlStrcmp(cur->name, (const xmlChar *)"SessionToken")) {
-                                xmlChar *content = xmlNodeListGetString(document, cur->children, 1);
-                                credential->aws_security_token = rd_strdup((const char *)content);
-                                xmlFree(content);
-                        }
-
-                        cur = cur->next;
-                }
                 
-                ret = 0;
+                /* libxml2 calls are not multi-thread safe. Guard these with
+                 * a global (not just per-rk) lock. */
+                {
+                        static rd_atomic32_t has_been_called;
+                        static mtx_t libxml2_lock;
+                        if (!rd_atomic32_exchange(&has_been_called, 1)) {
+                                mtx_init(&libxml2_lock, mtx_plain);
+                        }
+                        mtx_lock(&libxml2_lock);
+        
+                        xmlDoc* document = xmlReadMemory((char*) req.buffer,
+                            req.len, "assume_role_response.xml", NULL, 0);
+                        xmlNode* cur = NULL;
+                        if (document == NULL) goto done_libxml2;
+
+                        cur = xmlDocGetRootElement(document);
+                        if (xmlStrcmp(cur->name,
+                            (const xmlChar *)"ErrorResponse") == 0) {
+                                if (!errbuf) goto done_libxml2;
+                                cur = cur->children;
+                                while (cur != NULL) {
+                                        if (!xmlStrcmp(cur->name,
+                                            (const xmlChar *)"Error")) {
+                                                break;
+                                        }
+                                        cur = cur->next;
+                                }
+                                if (cur == NULL) goto done_libxml2;
+
+                                cur = cur->children;
+                                while (cur != NULL) {
+                                        if (!xmlStrcmp(cur->name,
+                                            (const xmlChar *)"Message")) {
+                                                xmlChar* content
+                                                    = xmlNodeListGetString(
+                                                    document, cur->children, 1);
+                                                rd_strlcpy(errbuf,
+                                                    (const char*) content,
+                                                    errbuf_size);
+                                                xmlFree(content);
+                                        }
+                                        cur = cur->next;
+                                }
+                                goto done_libxml2;
+                        }
+
+                        cur = cur->children;
+                        while (cur != NULL) {
+                                if (!xmlStrcmp(cur->name, (const xmlChar *)"AssumeRoleResult")) {
+                                        break;
+                                }
+                                cur = cur->next;
+                        }
+        
+                        if (cur == NULL) goto done_libxml2;
+                        cur = cur->children;
+                        while (cur != NULL) {
+                                if (!xmlStrcmp(cur->name, (const xmlChar *)"Credentials")) {
+                                        break;
+                                }
+                                cur = cur->next;
+                        }
+
+                        if (cur == NULL) goto done_libxml2;
+                        cur = cur->children;
+                        while (cur != NULL) {
+                                if (!xmlStrcmp(cur->name, 
+                                    (const xmlChar*) "AccessKeyId")) {
+                                        xmlChar* content = xmlNodeListGetString(
+                                            document, cur->children, 1);
+                                        credential->aws_access_key_id
+                                            = rd_strdup((const char *)content);
+                                        xmlFree(content);
+                                }
+        
+                                if (!xmlStrcmp(cur->name,
+                                    (const xmlChar*) "SecretAccessKey")) {
+                                        xmlChar* content = xmlNodeListGetString(
+                                            document, cur->children, 1);
+                                        credential->aws_secret_access_key
+                                            = rd_strdup((const char *)content);
+                                        xmlFree(content);
+                                }
+        
+                                if (!xmlStrcmp(cur->name,
+                                    (const xmlChar*) "SessionToken")) {
+                                        xmlChar* content = xmlNodeListGetString(
+                                            document, cur->children, 1);
+                                        credential->aws_security_token
+                                            = rd_strdup((const char *)content);
+                                        xmlFree(content);
+                                }
+        
+                                if (!xmlStrcmp(cur->name,
+                                    (const xmlChar*) "Expiration")) {
+                                        /* Expiration timestamps are in
+                                         * YYYY-MM-DDTHH:MM:SS.SSSZ format */
+                                        xmlChar* content = xmlNodeListGetString(
+                                            document, cur->children, 1);
+                                        struct tm tm = RD_ZERO_INIT;
+                                        float secf = 0.;
+                                        if (sscanf((const char*) content, 
+                                            "%4d-%2d-%2dT%2d:%2d:%fZ",
+                                            &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+                                            &tm.tm_hour, &tm.tm_min, &secf) == 6) {
+                                                tm.tm_year -= 1900;
+                                                tm.tm_mon -= 1;
+                                                tm.tm_sec = secf;
+                                                time_t epochSec = mktime(&tm);
+                                                if (epochSec > 0) {
+                                                        credential->md_lifetime_ms
+                                                            = epochSec * 1000l;
+                                                }
+                                        }
+                                        xmlFree(content);
+                                }
+        
+                                cur = cur->next;
+                        }
+                        
+                        ret = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        
+                done_libxml2:
+                        if (document) xmlFreeDoc(document);
+                        mtx_unlock(&libxml2_lock);
+                }
 
         cleanup_and_exit:
-                if (document) xmlFreeDoc(document);
 
                 RD_IF_FREE(req.buffer, rd_free);
                 RD_IF_FREE(curl_host, rd_free);
@@ -701,13 +775,13 @@ int rd_kafka_aws_send_request (rd_kafka_t* rk,
                 RD_IF_FREE(curl_amz_security_token_header, rd_free);
                 
                 if (sb) str_builder_destroy(sb);
-
-                if (curl_errbuf[0] && errbuf && (errbuf_size > 0)) {
-                        strncpy(errbuf, curl_errbuf, errbuf_size);
-                        errbuf[errbuf_size - 1] = '\0';
-                }
-        }
+        } /* if (curl) */
         curl_easy_cleanup(curl);
+        
+        /* backstop error string */
+        if ((ret != RD_KAFKA_RESP_ERR_NO_ERROR) && errbuf && !errbuf[0]) {
+            rd_strlcpy(errbuf, "AWS send request: unknown error", errbuf_size);
+        }
 
         return ret;
 }

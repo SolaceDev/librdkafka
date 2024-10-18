@@ -2386,12 +2386,18 @@ static void rd_kafka_broker_connect_auth(rd_kafka_broker_t *rkb) {
                         rd_kafka_broker_unlock(rkb);
 
                         if (rd_kafka_sasl_client_new(
-                                rkb->rkb_transport, sasl_errstr,
-                                sizeof(sasl_errstr)) == -1) {
-                                rd_kafka_broker_fail(rkb,
-                                    strncmp(sasl_errstr,
-                                        "SASL handshake failed", 21)
-                                    ? LOG_ERR: LOG_WARNING,
+                            rkb->rkb_transport, sasl_errstr,
+                            sizeof(sasl_errstr)) == -1) {
+                                int level = LOG_ERR;
+                                if (!strncmp(sasl_errstr,
+                                    "SASL handshake failed", 21)) {
+                                        level = LOG_WARNING;
+                                }
+                                else if (strstr(sasl_errstr,
+                                    "AWS_MSK_IAM_STS cannot authenticate")) {
+                                        level = LOG_WARNING;
+                                }
+                                rd_kafka_broker_fail(rkb, level,
                                     RD_KAFKA_RESP_ERR__AUTHENTICATION,
                                     "Failed to initialize "
                                     "SASL authentication: %s",
