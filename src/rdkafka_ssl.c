@@ -455,7 +455,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
-        namelen = strlen(name);
+        namelen = strnlen(name, sizeof(name));
         if (/*ipv6*/ (strchr(name, ':') &&
                         strspn(name, "0123456789abcdefABCDEF:.[]%") ==
                             namelen) ||

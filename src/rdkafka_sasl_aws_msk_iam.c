@@ -421,26 +421,6 @@ rd_kafka_aws_msk_iam_credential_refresh (rd_kafka_t *rk, void *opaque) {
         rd_kafka_sasl_aws_msk_iam_credential_free(&credential);
 }
 
-#if 0
-/**
- * @brief Op callback for RD_KAFKA_OP_AWS_MSK_IAM_REFRESH
- *
- * @locality Application thread
- */
-static rd_kafka_op_res_t
-rd_kafka_aws_msk_iam_refresh_op (rd_kafka_t *rk,
-                                 rd_kafka_q_t *rkq,
-                                 rd_kafka_op_t *rko) {
-        /* The op callback is invoked when the op is destroyed via
-         * rd_kafka_op_destroy() or rd_kafka_event_destroy(), so
-         * make sure we don't refresh upon destruction since
-         * the op has already been handled by this point.
-         */
-        rd_kafka_aws_msk_iam_credential_refresh(rk, rk->rk_conf.opaque);
-        return RD_KAFKA_OP_RES_HANDLED;
-}
-#endif
-
 /**
  * @brief Build client first message
  * 

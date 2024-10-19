@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2017-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -436,6 +437,7 @@ extern int unittest_sasl_oauthbearer_oidc(void);
 extern int unittest_aws_msk_iam (void);
 extern int unittest_aws (void);
 #endif
+extern int unittest_telemetry_decode(void);
 
 int rd_unittest(void) {
         int fails = 0;
@@ -482,6 +484,7 @@ int rd_unittest(void) {
 #endif
                 
                 { "stringbuilder",  unittest_stringbuilder },
+                {"telemetry", unittest_telemetry_decode},
                 {NULL}
         };
         int i;
