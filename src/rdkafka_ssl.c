@@ -1279,10 +1279,6 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                         return -1;
                 }
 
-                /* We no longer need the PEM key (it is cached in the CTX),
-                 * clear its memory. */
-                rd_kafka_desensitize_str(rk->rk_conf.ssl.key_pem);
-
                 check_pkey = rd_true;
         }
 
