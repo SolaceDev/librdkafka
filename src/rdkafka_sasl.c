@@ -400,6 +400,11 @@ int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
 #if WITH_SASL_OAUTHBEARER
                 provider = &rd_kafka_sasl_oauthbearer_provider;
 #endif
+        } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "AWS_MSK_IAM")) {
+                /* SASL AWS MSK IAM*/
+#if WITH_SASL_AWS_MSK_IAM
+                provider = &rd_kafka_sasl_aws_msk_iam_provider;
+#endif
         } else {
                 /* Unsupported mechanism */
                 rd_snprintf(errstr, errstr_size,
@@ -429,6 +434,9 @@ int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
 #endif
 #if WITH_SASL_OAUTHBEARER
                             " OAUTHBEARER"
+#endif
+#if WITH_SASL_AWS_MSK_IAM
+                            " SASL_AWS_MSK_IAM"
 #endif
                             ,
                             rk->rk_conf.sasl.mechanisms);
@@ -489,10 +497,12 @@ void rd_kafka_sasl_global_term(void) {
  */
 int rd_kafka_sasl_global_init(void) {
 #if WITH_SASL_CYRUS
-        return rd_kafka_sasl_cyrus_global_init();
-#else
-        return 0;
+        rd_kafka_sasl_cyrus_global_init();
 #endif
+#if WITH_SASL_AWS_MSK_IAM
+        rd_kafka_sasl_aws_msk_iam_global_init();
+#endif
+        return 0;
 }
 
 /**

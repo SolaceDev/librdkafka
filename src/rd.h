@@ -2,6 +2,7 @@
  * librd - Rapid Development C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -285,15 +286,16 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #endif
 
 #ifndef IOV_MAX
-#ifdef __APPLE__
-/* Some versions of MacOSX dont have IOV_MAX */
 #define IOV_MAX 1024
-#elif defined(_WIN32) || defined(__GNU__)
-/* There is no IOV_MAX on MSVC or GNU but it is used internally in librdkafka */
-#define IOV_MAX 1024
-#else
-#error "IOV_MAX not defined"
-#endif
+// #ifdef __APPLE__
+// /* Some versions of MacOSX dont have IOV_MAX */
+// #define IOV_MAX 1024
+// #elif defined(_WIN32) || defined(__GNU__)
+// /* There is no IOV_MAX on MSVC or GNU but it is used internally in librdkafka */
+// #define IOV_MAX 1024
+// #else
+// #error "IOV_MAX not defined"
+// #endif
 #endif
 
 
@@ -502,6 +504,10 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
                         FUNC(PTR);                                             \
         } while (0)
 
+
+#define RD_INTERFACE_CALL(i, name, ...) (i->name(i->opaque, __VA_ARGS__))
+
+#define RD_CEIL_INTEGER_DIVISION(X, DEN) (((X) + ((DEN)-1)) / (DEN))
 
 /**
  * @brief Utility types to hold memory,size tuple.

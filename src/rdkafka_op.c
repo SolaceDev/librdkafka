@@ -87,7 +87,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = "REPLY:LISTCONSUMERGROUPS",
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 "REPLY:DESCRIBECONSUMERGROUPS",
-            [RD_KAFKA_OP_DELETEGROUPS] = "REPLY:DELETEGROUPS",
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = "REPLY:DESCRIBETOPICS",
+            [RD_KAFKA_OP_DESCRIBECLUSTER] = "REPLY:DESCRIBECLUSTER",
+            [RD_KAFKA_OP_DELETEGROUPS]    = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
             [RD_KAFKA_OP_CREATEACLS]   = "REPLY:CREATEACLS",
@@ -116,6 +118,13 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:DESCRIBEUSERSCRAMCREDENTIALS",
             [RD_KAFKA_OP_NOTIFYRETRY] = "REPLY:NOTIFYRETRY",
             [RD_KAFKA_OP_UPDATEGRAVEYARDSTATS] = "REPLY:UPDATEGRAVEYARDSTATS",
+            [RD_KAFKA_OP_LISTOFFSETS]     = "REPLY:LISTOFFSETS",
+            [RD_KAFKA_OP_METADATA_UPDATE] = "REPLY:METADATA_UPDATE",
+            [RD_KAFKA_OP_SET_TELEMETRY_BROKER] =
+                "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
+            [RD_KAFKA_OP_TERMINATE_TELEMETRY] =
+                "REPLY:RD_KAFKA_OP_TERMINATE_TELEMETRY",
+            [RD_KAFKA_OP_ELECTLEADERS] = "REPLY:ELECTLEADERS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -245,7 +254,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_LISTCONSUMERGROUPS] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBECONSUMERGROUPS] =
                 sizeof(rko->rko_u.admin_request),
-            [RD_KAFKA_OP_DELETEGROUPS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBETOPICS]  = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBECLUSTER] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DELETEGROUPS]    = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),
@@ -274,6 +285,12 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_NOTIFYRETRY] = sizeof(rko->rko_u.dr),
             [RD_KAFKA_OP_UPDATEGRAVEYARDSTATS]  = sizeof(rko->rko_u.graveyard),
+            [RD_KAFKA_OP_LISTOFFSETS]     = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_METADATA_UPDATE] = sizeof(rko->rko_u.metadata),
+            [RD_KAFKA_OP_SET_TELEMETRY_BROKER] =
+                sizeof(rko->rko_u.telemetry_broker),
+            [RD_KAFKA_OP_TERMINATE_TELEMETRY] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_ELECTLEADERS] = sizeof(rko->rko_u.admin_request),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -386,6 +403,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
                 if (rko->rko_u.dr.rkt)
                         rd_kafka_topic_destroy0(rko->rko_u.dr.rkt);
+                if (rko->rko_u.dr.presult)
+                        rd_kafka_Produce_result_destroy(rko->rko_u.dr.presult);
                 break;
 
         case RD_KAFKA_OP_OFFSET_RESET:
@@ -420,15 +439,24 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DESCRIBEACLS:
         case RD_KAFKA_OP_DELETEACLS:
         case RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_DESCRIBETOPICS:
+        case RD_KAFKA_OP_DESCRIBECLUSTER:
         case RD_KAFKA_OP_LISTCONSUMERGROUPOFFSETS:
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
+        case RD_KAFKA_OP_LISTOFFSETS:
+        case RD_KAFKA_OP_ELECTLEADERS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states
                         .u.PTR) {
                         rd_list_destroy(rko->rko_u.admin_request.options
                                             .match_consumer_group_states.u.PTR);
+                }
+                if (rko->rko_u.admin_request.options.match_consumer_group_types
+                        .u.PTR) {
+                        rd_list_destroy(rko->rko_u.admin_request.options
+                                            .match_consumer_group_types.u.PTR);
                 }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);
@@ -445,6 +473,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_MOCK:
                 RD_IF_FREE(rko->rko_u.mock.name, rd_free);
                 RD_IF_FREE(rko->rko_u.mock.str, rd_free);
+                if (rko->rko_u.mock.metrics) {
+                        int64_t i;
+                        for (i = 0; i < rko->rko_u.mock.hi; i++)
+                                rd_free(rko->rko_u.mock.metrics[i]);
+                        rd_free(rko->rko_u.mock.metrics);
+                }
                 break;
 
         case RD_KAFKA_OP_BROKER_MONITOR:
@@ -465,6 +499,17 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.leaders.leaders, rd_list_destroy);
                 RD_IF_FREE(rko->rko_u.leaders.partitions,
                            rd_kafka_topic_partition_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_METADATA_UPDATE:
+                RD_IF_FREE(rko->rko_u.metadata.md, rd_kafka_metadata_destroy);
+                /* It's not needed to free metadata.mdi because they
+                   are the in the same memory allocation. */
+                break;
+
+        case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
+                RD_IF_FREE(rko->rko_u.telemetry_broker.rkb,
+                           rd_kafka_broker_destroy);
                 break;
 
         default:
@@ -752,11 +797,11 @@ rd_kafka_op_call(rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 rd_kafka_op_t *rd_kafka_op_new_ctrl_msg(rd_kafka_toppar_t *rktp,
                                         int32_t version,
                                         rd_kafka_buf_t *rkbuf,
-                                        int64_t offset) {
+                                        rd_kafka_fetch_pos_t pos) {
         rd_kafka_msg_t *rkm;
         rd_kafka_op_t *rko;
 
-        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, offset, 0,
+        rko = rd_kafka_op_new_fetch_msg(&rkm, rktp, version, rkbuf, pos, 0,
                                         NULL, 0, NULL);
 
         rkm->rkm_flags |= RD_KAFKA_MSG_F_CONTROL;
@@ -775,7 +820,7 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
                                          rd_kafka_toppar_t *rktp,
                                          int32_t version,
                                          rd_kafka_buf_t *rkbuf,
-                                         int64_t offset,
+                                         rd_kafka_fetch_pos_t pos,
                                          size_t key_len,
                                          const void *key,
                                          size_t val_len,
@@ -797,7 +842,8 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
         rko->rko_u.fetch.rkbuf = rkbuf;
         rd_kafka_buf_keep(rkbuf);
 
-        rkm->rkm_offset = offset;
+        rkm->rkm_offset                  = pos.offset;
+        rkm->rkm_u.consumer.leader_epoch = pos.leader_epoch;
 
         rkm->rkm_key     = (void *)key;
         rkm->rkm_key_len = key_len;
@@ -824,8 +870,11 @@ void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
                                int throttle_time) {
         rd_kafka_op_t *rko;
 
-        if (unlikely(throttle_time > 0))
+        if (unlikely(throttle_time > 0)) {
                 rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
+                rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
+                           throttle_time);
+        }
 
         /* We send throttle events when:
          *  - throttle_time > 0

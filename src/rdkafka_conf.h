@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2014-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -163,9 +164,14 @@ typedef enum {
         RD_KAFKA_RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY,
 } rd_kafka_client_dns_lookup_t;
 
+typedef enum {
+        RD_KAFKA_GROUP_PROTOCOL_CLASSIC,
+        RD_KAFKA_GROUP_PROTOCOL_CONSUMER,
+} rd_kafka_group_protocol_t;
+
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 33)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 40)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -302,6 +308,19 @@ struct rd_kafka_conf_s {
                 /* Hash size */
                 size_t scram_H_size;
 #endif
+#if WITH_SASL_AWS_MSK_IAM
+                /* AWS credentials for SASL auth
+                 * (standard toolchain not available in librdkafka) */
+                char *aws_access_key_id;
+                char *aws_secret_access_key;
+                char *aws_region;
+                int   enable_use_sts;
+                char *aws_external_id;  /* needed for STS AssumeRole */
+                char *role_arn;  /* needed for STS AssumeRole */
+                char *role_session_name;  /* needed for STS AssumeRole */
+                int   duration_sec;  /* needed for STS AssumeRole, defaults to 900 if not set */
+                /* SASL/AWS_MSK_IAM credential refresh event callback */
+#endif
                 char *oauthbearer_config;
                 int enable_oauthbearer_unsecure_jwt;
                 int enable_callback_queue;
@@ -351,6 +370,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int coord_query_intvl_ms;
         int max_poll_interval_ms;
+        int enable_metrics_push;
 
         int builtin_features;
         /*
@@ -366,8 +386,10 @@ struct rd_kafka_conf_s {
         int fetch_min_bytes;
         int fetch_queue_backoff_ms;
         int fetch_error_backoff_ms;
+        rd_kafka_group_protocol_t group_protocol;
         char *group_id_str;
         char *group_instance_id;
+        char *group_remote_assignor;
         int allow_auto_create_topics;
 
         rd_kafka_pattern_list_t *topic_blacklist;
@@ -382,6 +404,7 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
+        rd_bool_t partition_assignors_cooperative;
         int enabled_assignor_cnt;
 
         void (*rebalance_cb)(rd_kafka_t *rk,
@@ -426,6 +449,7 @@ struct rd_kafka_conf_s {
         int queue_backpressure_thres;
         int max_retries;
         int retry_backoff_ms;
+        int retry_backoff_max_ms;
         int batch_num_messages;
         int batch_size;
         rd_kafka_compression_t compression_codec;

@@ -39,6 +39,7 @@
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -141,7 +142,14 @@ typedef enum {
         RD_KAFKA_OP_DESCRIBECONSUMERGROUPS,  /**< Admin:
                                               *   DescribeConsumerGroups
                                               *   u.admin_request */
-        RD_KAFKA_OP_DELETEGROUPS, /**< Admin: DeleteGroups: u.admin_request*/
+        RD_KAFKA_OP_DESCRIBECLUSTER,         /**< Admin:
+                                              *   DescribeCluster
+                                              *   u.admin_request */
+
+        RD_KAFKA_OP_DESCRIBETOPICS, /**< Admin:
+                                     *   DescribeTopics
+                                     *   u.admin_request */
+        RD_KAFKA_OP_DELETEGROUPS,   /**< Admin: DeleteGroups: u.admin_request*/
         RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS, /**< Admin:
                                                  *   DeleteConsumerGroupOffsets
                                                  *   u.admin_request */
@@ -174,6 +182,15 @@ typedef enum {
                                                      u.admin_request >*/
         RD_KAFKA_OP_NOTIFYRETRY,               /**< Notify of produce retry */
         RD_KAFKA_OP_UPDATEGRAVEYARDSTATS,      /**< Update graveyard stats */
+        RD_KAFKA_OP_LISTOFFSETS,     /**< Admin: ListOffsets u.admin_request >*/
+        RD_KAFKA_OP_METADATA_UPDATE, /**< Metadata update (KIP 951) **/
+        RD_KAFKA_OP_SET_TELEMETRY_BROKER, /**< Set preferred broker for
+                                               telemetry. */
+        RD_KAFKA_OP_TERMINATE_TELEMETRY,  /**< Start termination sequence for
+                                               telemetry. */
+        RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
+                                           *   ElectLeaders
+                                           *   u.admin_request */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -404,6 +421,7 @@ struct rd_kafka_op_s {
                         rd_kafka_msgq_t msgq;
                         rd_kafka_msgq_t msgq2;
                         int do_purge2;
+                        rd_kafka_Produce_result_t *presult;
                 } dr;
 
                 struct {
@@ -535,6 +553,9 @@ struct rd_kafka_op_s {
                         char *errstr; /**< Error string, if rko_err
                                        *   is set, else NULL. */
 
+                        /** Result cb for this op */
+                        void (*result_cb)(rd_kafka_op_t *);
+
                         rd_list_t results; /**< Type depends on request type:
                                             *
                                             * (rd_kafka_topic_result_t *):
@@ -566,11 +587,14 @@ struct rd_kafka_op_s {
                                RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
+                               RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                RD_KAFKA_MOCK_CMD_COORD_SET,
                                RD_KAFKA_MOCK_CMD_APIVERSION_SET,
+                               RD_KAFKA_MOCK_CMD_REQUESTED_METRICS_SET,
+                               RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
                         } cmd;
 
                         rd_kafka_resp_err_t err; /**< Error for:
@@ -581,7 +605,9 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    BROKER_SET_RACK
-                                                  *    COORD_SET (key_type) */
+                                                  *    COORD_SET (key_type)
+                                                  *    PART_PUSH_LEADER_RESPONSE
+                                                  */
                         char *str;               /**< For:
                                                   *    COORD_SET (key) */
                         int32_t partition;       /**< For:
@@ -589,6 +615,7 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    PART_SET_LEADER
                                                   *    APIVERSION_SET (ApiKey)
+                                                  *    PART_PUSH_LEADER_RESPONSE
                                                   */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -607,7 +634,17 @@ struct rd_kafka_op_s {
                                                   *    TOPIC_CREATE (repl fact)
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    APIVERSION_SET (maxver)
+                                                  *    REQUESTED_METRICS_SET (metrics_cnt)
+                                                  *    TELEMETRY_PUSH_INTERVAL_SET (interval)
                                                   */
+                        int32_t leader_id;       /**< Leader id, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
+                                                  */
+                        int32_t leader_epoch;    /**< Leader epoch, for:
+                                                  *   PART_PUSH_LEADER_RESPONSE
+                                                  */
+                        char **metrics;          /**< Metrics requested, for:
+                                                  *   REQUESTED_METRICS_SET */
                 } mock;
 
                 struct {
@@ -675,6 +712,11 @@ struct rd_kafka_op_s {
                          *  to be recorded in the graveyard. */
                         rd_kafka_stats_total_t stats;
                 } graveyard;
+
+                struct {
+                        /** Preferred broker for telemetry. */
+                        rd_kafka_broker_t *rkb;
+                } telemetry_broker;
 
         } rko_u;
 };
@@ -744,7 +786,7 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
                                          rd_kafka_toppar_t *rktp,
                                          int32_t version,
                                          rd_kafka_buf_t *rkbuf,
-                                         int64_t offset,
+                                         rd_kafka_fetch_pos_t pos,
                                          size_t key_len,
                                          const void *key,
                                          size_t val_len,
@@ -753,7 +795,7 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
 rd_kafka_op_t *rd_kafka_op_new_ctrl_msg(rd_kafka_toppar_t *rktp,
                                         int32_t version,
                                         rd_kafka_buf_t *rkbuf,
-                                        int64_t offset);
+                                        rd_kafka_fetch_pos_t pos);
 
 void rd_kafka_op_throttle_time(struct rd_kafka_broker_s *rkb,
                                rd_kafka_q_t *rkq,

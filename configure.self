@@ -34,7 +34,7 @@ mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-c
 
 mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
 
-mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.3)" "y"
+mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.4)" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
 mkl_toggle_option "Feature" ENABLE_REGEX_EXT "--enable-regex-ext" "Enable external (libc) regex (else use builtin)" "y"
@@ -149,6 +149,15 @@ void foo (void) {
 
         if [[ $WITH_CURL == y ]]; then
             mkl_allvar_set WITH_OAUTHBEARER_OIDC WITH_OAUTHBEARER_OIDC y
+        fi
+
+        # SASL AWS MSK IAM requires base64 encoding from OpenSSL
+        if mkl_lib_check "curl" "" disable CC "-lcurl" \
+                            "#include <curl/curl.h>"; then
+            if mkl_lib_check "libxml2" "" disable CC "-lxml2" \
+                            "#include <libxml/parser.h>"; then
+                mkl_allvar_set WITH_SASL_AWS_MSK_IAM WITH_SASL_AWS_MSK_IAM y
+            fi
         fi
     fi
 

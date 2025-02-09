@@ -455,7 +455,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
-        namelen = strlen(name);
+        namelen = strnlen(name, sizeof(name));
         if (/*ipv6*/ (strchr(name, ':') &&
                         strspn(name, "0123456789abcdefABCDEF:.[]%") ==
                             namelen) ||
@@ -1278,10 +1278,6 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                                     "ssl.key.pem failed: ");
                         return -1;
                 }
-
-                /* We no longer need the PEM key (it is cached in the CTX),
-                 * clear its memory. */
-                rd_kafka_desensitize_str(rk->rk_conf.ssl.key_pem);
 
                 check_pkey = rd_true;
         }

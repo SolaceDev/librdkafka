@@ -79,6 +79,12 @@ extern const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider;
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_oauthbearer_provider;
 #endif
 
+#if WITH_SASL_AWS_MSK_IAM
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_aws_msk_iam_provider;
+void rd_kafka_sasl_aws_msk_iam_global_term(void);
+int rd_kafka_sasl_aws_msk_iam_global_init(void);
+#endif
+
 void rd_kafka_sasl_auth_done(rd_kafka_transport_t *rktrans);
 int rd_kafka_sasl_send(rd_kafka_transport_t *rktrans,
                        const void *payload,
