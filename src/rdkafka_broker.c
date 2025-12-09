@@ -605,7 +605,12 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
                 rd_kafka_log(rkb->rkb_rk, level, "FAIL", "%s: %s",
                              rkb->rkb_name, errstr);
 
-                if (level <= LOG_ERR)
+                /* SOLACE: san_kafka_integration.tcl expects certain errors,
+                   but they are being suppressed by the log level check.
+                   Additionally, it reduces the clarity of error messages
+                   reported back to Solace in certain situations.
+                */
+                /* if (level <= LOG_ERR) */
                         /* Send ERR op to application for processing. */
                         rd_kafka_q_op_err(rkb->rkb_rk->rk_rep, err, "%s: %s",
                                           rkb->rkb_name, errstr);
