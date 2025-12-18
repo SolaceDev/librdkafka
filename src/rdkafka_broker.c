@@ -504,7 +504,8 @@ static void rd_kafka_broker_set_error(rd_kafka_broker_t *rkb,
 
         /* Provide more meaningful error messages in certain cases */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT &&
-            rd_kafka_transport_error_disconnected(fmt)) {
+            /* SOLACE: use errstr instead of fmt */
+            rd_kafka_transport_error_disconnected(errstr)) {
                 if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
                         /* A disconnect while requesting ApiVersion typically
                          * means we're connecting to a SSL-listener as
