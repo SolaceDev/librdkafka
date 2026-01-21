@@ -20,6 +20,7 @@ SOURCES
 gmon.out
 *.gz
 *.tgz
+!tests/trivup/trivup*.tar.gz
 *.bz2
 *.deb
 *.rpm
@@ -33,3 +34,4 @@ TAGS
 nbproject
 .vscode
 vcpkg_installed
+*tmp-KafkaCluster*
