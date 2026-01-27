@@ -4948,6 +4948,7 @@ const char *rd_kafka_version_str(void) {
         if (*ret)
                 return ret;
 
+#undef LIBRDKAFKA_GIT_VERSION /* SOLACE: don't use git tag version */
 #ifdef LIBRDKAFKA_GIT_VERSION
         if (*LIBRDKAFKA_GIT_VERSION) {
                 of = rd_snprintf(ret, sizeof(ret), "%s",

@@ -737,6 +737,7 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
         X509 *ca;
         int r, ret = 0;
         unsigned long err;
+        ERR_clear_error(); /* SOLACE: clear prior errors. See SOL-146021 */
         while (1) {
                 ca = X509_new();
                 if (ca == NULL) {
