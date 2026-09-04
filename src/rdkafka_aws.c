@@ -909,6 +909,7 @@ char *rd_kafka_aws_build_sasl_payload (rd_kafka_t* rk,
 static int unittest_build_sasl_payload (void) {
         RD_UT_BEGIN();
 
+        rd_kafka_t ut_rk = RD_ZERO_INIT;
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
         char *ymd = "20100101";
         char *hms = "000000";
@@ -918,14 +919,14 @@ static int unittest_build_sasl_payload (void) {
         char *aws_secret_access_key = "AWS_SECRET_ACCESS_KEY";
         char *aws_security_token = NULL;
         char *algorithm = "AWS4-HMAC-SHA256";
-        char *canonical_headers = "host:hostname";
+        char *canonical_headers = "host:hostname\n";
         char *signed_headers = "host";
         char *host = "hostname";
         char *method = "GET";
         char *request_parameters = "";
 
         char *canonical_querystring = rd_kafka_aws_build_sasl_canonical_querystring(
-                NULL,
+                &ut_rk,
                 "kafka-cluster:Connect",
                 aws_access_key_id,
                 aws_region,
@@ -938,7 +939,7 @@ static int unittest_build_sasl_payload (void) {
         char *expected_canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
         RD_UT_ASSERT(strcmp(expected_canonical_querystring, canonical_querystring) == 0, "expected: %s\nactual: %s", expected_canonical_querystring, canonical_querystring);
         
-        char *sasl_payload = rd_kafka_aws_build_sasl_payload(NULL,
+        char *sasl_payload = rd_kafka_aws_build_sasl_payload(&ut_rk,
                 ymd,
                 hms,
                 host,
@@ -985,7 +986,7 @@ static int unittest_build_sts_request (void) {
         char *aws_access_key_id = "TESTKEY";
         char *aws_secret_access_key = "TESTSECRET";
         char *algorithm = "AWS4-HMAC-SHA256";
-        char *canonical_headers = "content-length:171\ncontent-type:application/x-www-form-urlencoded; charset=utf-8\nhost:sts.amazonaws.com\nx-amz-date:20210910T190714Z";
+        char *canonical_headers = "content-length:171\ncontent-type:application/x-www-form-urlencoded; charset=utf-8\nhost:sts.amazonaws.com\nx-amz-date:20210910T190714Z\n";
         char *signed_headers = "content-length;content-type;host;x-amz-date";
         char *method = "POST";
         char *canonical_querystring = "";
@@ -1066,7 +1067,7 @@ static int unittest_build_signature (void) {
         char *aws_service = "kafka-cluster";
         char *aws_secret_access_key = "AWS_SECRET_ACCESS_KEY";
         char *algorithm = "AWS4-HMAC-SHA256";
-        char *canonical_headers = "host:hostname";
+        char *canonical_headers = "host:hostname\n";
         char *signed_headers = "host";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
@@ -1127,7 +1128,7 @@ static int unittest_build_canonical_request_with_security_token (void) {
         RD_UT_BEGIN();
         
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
-        char *canonical_headers = "host:hostname";
+        char *canonical_headers = "host:hostname\n";
         char *signed_headers = "host";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-Security-Token=security-token&X-Amz-SignedHeaders=host";
@@ -1167,7 +1168,7 @@ static int unittest_build_canonical_request (void) {
         RD_UT_BEGIN();
 
         const EVP_MD *md = EVP_get_digestbyname("SHA256");
-        char *canonical_headers = "host:hostname";
+        char *canonical_headers = "host:hostname\n";
         char *signed_headers = "host";
         char *method = "GET";
         char *canonical_querystring = "Action=kafka-cluster%3AConnect&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AWS_ACCESS_KEY_ID%2F20100101%2Fus-east-1%2Fkafka-cluster%2Faws4_request&X-Amz-Date=20100101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host";
