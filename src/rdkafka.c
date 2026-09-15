@@ -1427,7 +1427,7 @@ rd_kafkap_str_t* rd_kafka_make_json_str(char const* str, size_t len) {
         if ((str == NULL) || (len <= 0)) return NULL;
 
         for (; idx < len; ++idx) {
-                const char* escape_str = escape_strs[(unsigned)str[idx]];
+                const char* escape_str = escape_strs[(unsigned char)str[idx]];
                 if (escape_str == NULL) {
                         jsstr[jslen++] = str[idx];
                 } else {
