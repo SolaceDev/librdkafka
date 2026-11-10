@@ -181,6 +181,9 @@ static const char *rd_kafka_jwt_b64_decode_payload(const char *src,
 
         nbytesdecoded = ((payload_len + 3) / 4) * 3;
         *bufplainp    = rd_malloc(nbytesdecoded + 1);
+        /* The extra byte holds the NUL, because the caller parses the
+         * payload as a string. */
+        (*bufplainp)[nbytesdecoded] = '\0';
 
         if (EVP_DecodeBlock((uint8_t *)(*bufplainp), (uint8_t *)payload,
                             (int)payload_len) == -1) {
